@@ -3,61 +3,72 @@ package design.strategymethod;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import fj.data.List;
+
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.SortedMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import static design.strategymethod.BacklogProjectionCalculator.SlaDispersionStrategy;
-import static design.strategymethod.BacklogProjectionCalculator.Sla;
-import static design.strategymethod.BacklogProjectionCalculator.ThroughputStrategy;
-import static design.strategymethod.BacklogProjectionCalculator.calculate;
+import static design.strategymethod.BacklogProjectionCalculator.*;
 import static design.strategymethod.Workflow.Stage;
 
 @Service
 @RequiredArgsConstructor
 public class BacklogProjectionUseCase {
 
-	private final Supplier<SortedMap<Sla, Integer>> actualBacklogSupplier;
 	private final RequestClock requestClock;
-	private final PlannedThroughputGetter plannedThroughputGetter;
+	private final StaffingPlanGetter staffingPlanGetter;
+	private final Supplier<WorkflowBacklog> actualBacklogSupplier;
+	private final Supplier<Stream<Sla>> nextKnownSlasSupplier;
+	private final Supplier<ProcessedSlasDistributionDecider> processingStrategySupplier;
+	private final Supplier<BacklogBoundsDecider> backlogBoundsDeciderSupplier;
+	private final Supplier<UpstreamThroughputTrajectory> upstreamThroughputTrajectorySupplier;
 
-	public SortedMap<Sla, Integer> execute(final Workflow workflow) {
-		final double[][] throughputByStageOrdinalByHourIndex = plannedThroughputGetter.get(
-				requestClock.now(),
-				requestClock.now().plus(72, ChronoUnit.HOURS),
-				workflow.stages
-		);
+	public List<WorkflowTrajectoryStep> execute(final Workflow workflow) {
 		final StrategiesByWorkflow strategies = StrategiesByWorkflow.from(workflow);
-		return calculate(
-				actualBacklogSupplier.get(),
-				strategies.throughputStrategy,
-				strategies.bufferStrategy,
-				throughputByStageOrdinalByHourIndex
+
+		var actualBacklog = actualBacklogSupplier.get();
+		var nextKnownSlas = nextKnownSlasSupplier.get();
+
+		var workflowTrajectory = buildWorkflowTrajectory(
+				requestClock.now(),
+				actualBacklog,
+				nextKnownSlas,
+				strategies.firstStepBuilder,
+				strategies.nextStepBuilder,
+				staffingPlanGetter.get(
+						requestClock.now(),
+						requestClock.now().plus(72, ChronoUnit.HOURS),
+						workflow.stages
+				),
+				processingStrategySupplier.get(),
+				backlogBoundsDeciderSupplier.get(),
+				upstreamThroughputTrajectorySupplier.get()
 		);
+		return workflowTrajectory;
 	}
 
-	interface PlannedThroughputGetter {
-		/** @return the throughput by stage index by hour index  */
-		double[][] get(Instant from, Instant to, Stage[] stages);
+	interface StaffingPlanGetter {
+		BacklogProjectionCalculator.StaffingPlan get(Instant from, Instant to, Stage[] stages);
 	}
 
 	private enum StrategiesByWorkflow {
-		inbound(ThroughputStrategies::optimistic, SlaDispersionStrategies::maximizeProductivity),
-		outboundDirect(ThroughputStrategies::pessimistic, SlaDispersionStrategies::minimizeProcessingTime),
-		outboundWall(ThroughputStrategies::pessimistic, SlaDispersionStrategies::maximizeProductivity);
+		inbound(WorkflowTrajectoryBuilderStrategies::inboundFirstStepBuilder, WorkflowTrajectoryBuilderStrategies::inboundNextStepBuilder),
+		outboundDirect(WorkflowTrajectoryBuilderStrategies::dammedSourceFirstStepBuilder, WorkflowTrajectoryBuilderStrategies::dammedSourceNextStepBuilder),
+		outboundWall(WorkflowTrajectoryBuilderStrategies::dammedSourceFirstStepBuilder, WorkflowTrajectoryBuilderStrategies::dammedSourceNextStepBuilder);
 
-		private final ThroughputStrategy throughputStrategy;
-		private final SlaDispersionStrategy bufferStrategy;
+		private final WorkflowTrajectoryFirstStepBuilder firstStepBuilder;
+		private final WorkflowTrajectoryNextStepBuilder nextStepBuilder;
 
 		StrategiesByWorkflow(
-				ThroughputStrategy tphStrategy,
-				SlaDispersionStrategy bufferStrategy
+				WorkflowTrajectoryFirstStepBuilder firstStepBuilder,
+				WorkflowTrajectoryNextStepBuilder nextStepBuilder
 		) {
-			this.throughputStrategy = tphStrategy;
-			this.bufferStrategy = bufferStrategy;
+			this.firstStepBuilder = firstStepBuilder;
+			this.nextStepBuilder = nextStepBuilder;
 		}
 
 		static StrategiesByWorkflow from(final Workflow workflow) {

@@ -4,27 +4,44 @@ import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
 public enum Workflow {
-	inbound(InboundStages.values()),
-	outboundDirect(OutboundDirectStages.values()),
-	outboundWall(OutboundWallStages.values());
+	inbound(InboundStage.values()),
+	outboundDirect(OutboundDirectStage.values()),
+	outboundWall(OutboundWallStage.values());
 
 	public final Stage[] stages;
 
 	public interface Stage {
 		String name();
 		int ordinal();
+		int workflowIndex();
+//		default int compareTo(Stage o) {
+//			return ordinal() - o.ordinal();
+//		}
 	}
 
-	enum InboundStages implements Stage {
-		checkIn, putAway
+	 enum InboundStage implements Stage {
+		checkIn, putAway;
+		public int workflowIndex() {
+			return inbound.ordinal();
+		}
 	}
 
-	enum OutboundDirectStages implements Stage {
-		pickingDirect, packingDirect
+	enum OutboundDirectStage implements Stage {
+		wavingDirect, pickingDirect, packingDirect;
+
+		@Override
+		public int workflowIndex() {
+			return outboundDirect.ordinal();
+		}
 	}
 
-	enum OutboundWallStages implements Stage {
-		pickingForWall, walling, packingWalled
+	enum OutboundWallStage implements Stage {
+		wavingForWall, pickingForWall, walling, packingWalled;
+
+		@Override
+		public int workflowIndex() {
+			return outboundWall.ordinal();
+		}
 	}
 
 }
