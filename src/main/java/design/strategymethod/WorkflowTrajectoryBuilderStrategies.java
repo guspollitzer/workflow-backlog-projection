@@ -1,6 +1,7 @@
 package design.strategymethod;
 
 import design.strategymethod.Workflow.OutboundWallStage;
+import design.strategymethod.Workflow.Stage;
 
 import fj.data.List;
 import fj.data.TreeMap;
@@ -20,41 +21,60 @@ public interface WorkflowTrajectoryBuilderStrategies {
 			ProcessedSlasDistributionDecider processedSlasDistributionDecider,
 			BacklogBoundsDecider backlogBoundsDecider
 	) {
-		var wavingInitialPile = startingBacklog.getHeapAt(OutboundWallStage.wavingForWall);
-		var wavingPower = staffingPlan.integrateThroughputOf(OutboundWallStage.wavingForWall, stepStartingDate, nextDeadline);
+		// ----- waving step
+		final var wavingInitialHeap = startingBacklog.getHeapAt(OutboundWallStage.wavingForWall);
 
-		var pickingInitialPile = startingBacklog.getHeapAt(OutboundWallStage.pickingForWall);
-		var pickingPower = staffingPlan.integrateThroughputOf(OutboundWallStage.pickingForWall, stepStartingDate, nextDeadline);
+		final var pickingInitialHeap = startingBacklog.getHeapAt(OutboundWallStage.pickingForWall);
+		final var pickingInitialHeapTotal = pickingInitialHeap.total();
+		final var pickingPower = staffingPlan.integrateThroughputOf(OutboundWallStage.pickingForWall, stepStartingDate, nextDeadline);
 
-		var wallingInitialPile = startingBacklog.getHeapAt(OutboundWallStage.walling);
-		var wallingPower = staffingPlan.integrateThroughputOf(OutboundWallStage.walling, stepStartingDate, nextDeadline);
+		final var readyToPickBufferBounds = backlogBoundsDecider.getMinAndMax(OutboundWallStage.pickingForWall, stepStartingDate);
+		final var readyToPickMinBufferSize = staffingPlan.integrateThroughputOf(OutboundWallStage.pickingForWall, stepStartingDate, stepStartingDate.plus(readyToPickBufferBounds._1()));
+		final var readyToPickMaxBufferSize = staffingPlan.integrateThroughputOf(OutboundWallStage.pickingForWall, stepStartingDate, stepStartingDate.plus(readyToPickBufferBounds._2()));
 
-		var packingInitialPile = startingBacklog.getHeapAt(OutboundWallStage.packingWalled);
-		var packingPower = staffingPlan.integrateThroughputOf(OutboundWallStage.packingWalled, stepStartingDate, nextDeadline);
-
-
-		var readyToPickBounds = backlogBoundsDecider.getMinAndMax(OutboundWallStage.pickingForWall, stepStartingDate);
-		var readyToPickDesiredBufferSizeInTime = (readyToPickBounds._1().plus(readyToPickBounds._2())).dividedBy(2);
-		var readyToPickDesiredBufferSizeInQuantity = staffingPlan.integrateThroughputOf(OutboundWallStage.pickingForWall, stepStartingDate, stepStartingDate.plus(readyToPickDesiredBufferSizeInTime));
-		var wavedTotalQuantity = (int)(pickingPower + readyToPickDesiredBufferSizeInQuantity) - pickingInitialPile.total();
-		var wavedHeap = processedSlasDistributionDecider
-				.decide(OutboundWallStage.wavingForWall, wavingInitialPile, wavedTotalQuantity, stepStartingDate, nextDeadline);
-		var wavingStep = new StageTrajectoryStep(OutboundWallStage.wavingForWall, wavingInitialPile, wavedHeap);
-
-
-
-		// TODO
-		var wallingStep = new StageTrajectoryStep(
-				OutboundWallStage.walling,
-				startingBacklog.getHeapAt(OutboundWallStage.walling),
-				staffingPlan.integrateThroughputOf(OutboundWallStage.walling, stepStartingDate, nextDeadline)
+		final var wavedLimitlessQuantity = pickingPower + (pickingInitialHeapTotal < readyToPickMinBufferSize
+				? readyToPickMinBufferSize - pickingInitialHeapTotal
+				: readyToPickMaxBufferSize < pickingInitialHeapTotal
+					? readyToPickMaxBufferSize - pickingInitialHeapTotal
+					: 0D
 		);
-		var packingStep = new StageTrajectoryStep(
-				OutboundWallStage.packingWalled,
-				packingInitialPile,
-				processedSlasDistributionDecider.decide(OutboundWallStage.packingWalled, packingInitialPile, packingPower, stepStartingDate, nextDeadline)
-		);
-		return new WorkflowTrajectoryStep(startingDate, List.arrayList(wavingStep, ...));
+		final var wavedTotal = Math.max(0, Math.min(wavingInitialHeap.total(), Math.round(wavedLimitlessQuantity)));
+		final var wavedHeap = processedSlasDistributionDecider
+				.decide(
+						OutboundWallStage.wavingForWall,
+						wavingInitialHeap,
+						wavedTotal,
+						stepStartingDate,
+						nextDeadline
+				);
+		assert wavedTotal == wavedHeap.total();
+		final var wavingStep = new StageTrajectoryStep(OutboundWallStage.wavingForWall, wavingInitialHeap, wavedHeap, wavedTotal);
+
+		// all the other steps
+		class LocalFuncContainer {
+			StageTrajectoryStep calcStageStep(final Stage stage, final long processedByPreviousStage) {
+				final var initialHeap = startingBacklog.getHeapAt(stage);
+				final var initialHeapTotal = initialHeap.total();
+				final var processingPower = staffingPlan.integrateThroughputOf(stage, stepStartingDate, nextDeadline);
+				final var processedTotal = Math.min(processedByPreviousStage + initialHeapTotal, Math.round(processingPower));
+				final var processedHeap = processedSlasDistributionDecider
+						.decide(
+								stage,
+								initialHeap,
+								processedTotal,
+								stepStartingDate,
+								nextDeadline
+						);
+				assert processedTotal == processedHeap.total();
+				return new StageTrajectoryStep(OutboundWallStage.wavingForWall, initialHeap, processedHeap, processedTotal);
+			}
+		}
+		final var localFuncContainer = new LocalFuncContainer();
+
+		final var pickingStep = localFuncContainer.calcStageStep(OutboundWallStage.pickingForWall, wavingStep.processedTotal());
+		final var wallingStep = localFuncContainer.calcStageStep(OutboundWallStage.walling, pickingStep.processedTotal());
+		final var packingStep = localFuncContainer.calcStageStep(OutboundWallStage.packingWalled, wallingStep.processedTotal());
+		return new WorkflowTrajectoryStep(stepStartingDate, List.arrayList(wavingStep, pickingStep, wallingStep, packingStep));
 	}
 
 	static WorkflowTrajectoryStep dammedSourceNextStepBuilder(

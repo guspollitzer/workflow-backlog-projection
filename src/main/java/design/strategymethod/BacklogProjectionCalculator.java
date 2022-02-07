@@ -81,7 +81,7 @@ public interface BacklogProjectionCalculator {
 		 * <p>(2) {@code result.get(sla) <= initialHeap.get(sla)} for all slas.
 		 * <p>The number of units that are processed for each SLA is an implementation decision.
 		 * The caller compromise is that the interval {@code (start,end)} should not contain any of the inflection points returned by {@link #getInflectionPointsBetween(Instant, Instant)}. */
-		Heap decide(Stage stage, Heap initialHeap, int processedQuantity, Instant start, Instant end);
+		Heap decide(Stage stage, Heap initialHeap, long processedQuantity, Instant start, Instant end);
 
 		Stream<Instant> getInflectionPointsBetween(Instant from, Instant to);
 	}
@@ -102,7 +102,7 @@ public interface BacklogProjectionCalculator {
 	 * @param initialBacklog the actual backlog at the {@link Stage} when the step started.
 	 * @param processed the amount of units processed during this step.
 	 */
-	record StageTrajectoryStep(Stage stage, Heap initialBacklog, Heap processed) {}
+	record StageTrajectoryStep(Stage stage, Heap initialBacklog, Heap processed, long processedTotal) {}
 
 	/**
 	 * Contains all the information, about a step of the backlog trajectory of a whole workflow, needed to calculate the next step.
