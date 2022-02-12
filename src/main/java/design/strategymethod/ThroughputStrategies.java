@@ -1,14 +1,26 @@
 package design.strategymethod;
 
-import java.util.stream.DoubleStream;
+import design.strategymethod.BacklogProjectionCalculator.Plan;
+import design.strategymethod.Workflow.Stage;
+
+import java.time.Instant;
+import java.util.Arrays;
 
 public interface ThroughputStrategies {
 
-	static double pessimistic(double[] throughputOfThisAndFollowingStages) {
-		return DoubleStream.of(throughputOfThisAndFollowingStages).min().orElse(0.0);
+	static double pessimistic(Plan plan, Stage[] stages, Instant startingPoint, Instant endingPoint) {
+		return Arrays.stream(stages)
+				.mapToDouble(stage -> plan.integrateThroughput(stage, startingPoint, endingPoint))
+				.min().orElse(0d);
 	}
 
-	static double optimistic(double[] throughputOfThisAndFollowingStages) {
-		return DoubleStream.of(throughputOfThisAndFollowingStages).max().orElse(0.0);
+	static double average(Plan plan, Stage[] stages, Instant startingPoint, Instant endingPoint) {
+		return Arrays.stream(stages)
+				.mapToDouble(stage -> plan.integrateThroughput(stage, startingPoint, endingPoint))
+				.average().orElse(0d);
+	}
+
+	static double backpressure(Plan plan, Stage[] stages, Instant startingPoint, Instant endingPoint) {
+		return plan.integrateThroughput(stages[1], startingPoint, endingPoint);
 	}
 }

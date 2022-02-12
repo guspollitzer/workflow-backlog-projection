@@ -1,71 +1,81 @@
 package design.strategymethod;
 
+import design.strategymethod.Workflow.Stage;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import fj.data.List;
+
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.SortedMap;
-import java.util.function.Supplier;
+import java.util.Optional;
+import java.util.TreeSet;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
-import static design.strategymethod.BacklogProjectionCalculator.SlaDispersionStrategy;
-import static design.strategymethod.BacklogProjectionCalculator.Sla;
-import static design.strategymethod.BacklogProjectionCalculator.ThroughputStrategy;
-import static design.strategymethod.BacklogProjectionCalculator.calculate;
-import static design.strategymethod.Workflow.Stage;
+import static design.strategymethod.BacklogProjectionCalculator.*;
 
 @Service
 @RequiredArgsConstructor
 public class BacklogProjectionUseCase {
 
-	private final Supplier<SortedMap<Sla, Integer>> actualBacklogSupplier;
 	private final RequestClock requestClock;
-	private final PlannedThroughputGetter plannedThroughputGetter;
+	private final BiFunction<Workflow, Instant, int[]> startingBacklogSupplier;
+	private final BiFunction<Workflow, Instant, TreeSet<Instant>> slasSupplier;
+	private final BiFunction<Workflow, Instant, Plan> staffingPlanSupplier;
 
-	public SortedMap<Sla, Integer> execute(final Workflow workflow) {
-		final double[][] throughputByStageOrdinalByHourIndex = plannedThroughputGetter.get(
-				requestClock.now(),
-				requestClock.now().plus(72, ChronoUnit.HOURS),
-				workflow.stages
-		);
-		final StrategiesByWorkflow strategies = StrategiesByWorkflow.from(workflow);
+	public List<double[]> execute(final Workflow workflow) {
 		return calculate(
-				actualBacklogSupplier.get(),
-				strategies.throughputStrategy,
-				strategies.bufferStrategy,
-				throughputByStageOrdinalByHourIndex
+				requestClock.now(),
+				startingBacklogSupplier.apply(workflow, requestClock.now()),
+				slasSupplier.apply(workflow, requestClock.now()),
+				staffingPlanSupplier.apply(workflow, requestClock.now()),
+				WorkflowStructure.from(workflow)
 		);
 	}
 
-	interface PlannedThroughputGetter {
-		/** @return the throughput by stage index by hour index  */
-		double[][] get(Instant from, Instant to, Stage[] stages);
+	interface ThroughputStrategy {
+		double calcCombinedThroughput(Plan plan, Stage[] stages, Instant startingPoint, Instant endingPoint);
 	}
 
-	private enum StrategiesByWorkflow {
-		inbound(ThroughputStrategies::optimistic, SlaDispersionStrategies::maximizeProductivity),
+	@Getter
+	enum WorkflowStructure implements Structure {
+		inbound(ThroughputStrategies::backpressure, SlaDispersionStrategies::maximizeProductivity),
 		outboundDirect(ThroughputStrategies::pessimistic, SlaDispersionStrategies::minimizeProcessingTime),
-		outboundWall(ThroughputStrategies::pessimistic, SlaDispersionStrategies::maximizeProductivity);
+		outboundWall(ThroughputStrategies::average, SlaDispersionStrategies::maximizeProductivity);
 
+		private final Workflow workflow;
 		private final ThroughputStrategy throughputStrategy;
-		private final SlaDispersionStrategy bufferStrategy;
+		private final SlaDispersionStrategy slaDispersionStrategy;
 
-		StrategiesByWorkflow(
-				ThroughputStrategy tphStrategy,
-				SlaDispersionStrategy bufferStrategy
-		) {
-			this.throughputStrategy = tphStrategy;
-			this.bufferStrategy = bufferStrategy;
+		WorkflowStructure(ThroughputStrategy throughputStrategy, SlaDispersionStrategy bufferStrategy) {
+			this.workflow = Workflow.valueOf(this.name());
+			this.throughputStrategy = throughputStrategy;
+			this.slaDispersionStrategy = bufferStrategy;
 		}
 
-		static StrategiesByWorkflow from(final Workflow workflow) {
-			return StrategiesByWorkflow.valueOf(workflow.name());
+		@Override
+		public Stage[] getStages() {
+			return workflow.stages;
+		}
+
+		@Override
+		public Optional<Stage> sourceOf(Stage stage) {
+			return stage.ordinal() == 0 ? Optional.empty() : Optional.of(workflow.stages[stage.ordinal() - 1]);
+		}
+
+		@Override
+		public double integrateFirstStageThroughput(Plan plan, Instant startingPoint, Instant endingPoint) {
+			return throughputStrategy.calcCombinedThroughput(plan, workflow.stages, startingPoint, endingPoint);
+		}
+
+		static WorkflowStructure from(final Workflow workflow) {
+			return WorkflowStructure.valueOf(workflow.name());
 		}
 
 		static {
-			assert Arrays.stream(StrategiesByWorkflow.values()).map(StrategiesByWorkflow::name).collect(Collectors.toSet())
+			assert Arrays.stream(WorkflowStructure.values()).map(WorkflowStructure::name).collect(Collectors.toSet())
 					.equals(Arrays.stream(Workflow.values()).map(Workflow::name).collect(Collectors.toSet()));
 		}
 	}

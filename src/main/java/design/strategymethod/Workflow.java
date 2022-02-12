@@ -16,11 +16,11 @@ public enum Workflow {
 	}
 
 	enum InboundStages implements Stage {
-		checkIn, putAway
+		receiving, checkIn, putAway
 	}
 
 	enum OutboundDirectStages implements Stage {
-		pickingDirect, packingDirect
+		waving, pickingDirect, packingDirect
 	}
 
 	enum OutboundWallStages implements Stage {
