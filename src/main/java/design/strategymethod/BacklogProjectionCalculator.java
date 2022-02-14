@@ -23,7 +23,7 @@ public interface BacklogProjectionCalculator {
 		float[] calcProcessingProportions(Duration[] nextSlasDistances);
 	}
 
-	interface Structure {
+	interface Behaviour {
 		Stage[] getStages();
 
 		Optional<Stage> sourceOf(Stage stage);
@@ -38,7 +38,7 @@ public interface BacklogProjectionCalculator {
 			final int[] startingBacklog,
 			final SortedSet<Instant> inflectionPoints,
 			final Plan plan,
-			final Structure structure
+			final Behaviour behaviour
 	) {
 		class LMC {
 			List<double[]> loop(
@@ -50,7 +50,7 @@ public interface BacklogProjectionCalculator {
 					return alreadyCalculatedSteps;
 				} else {
 					final var currentStepEndingPoint = nextStepsStartingPoints.head();
-					final var currentStepEndingBacklog = Arrays.stream(structure.getStages())
+					final var currentStepEndingBacklog = Arrays.stream(behaviour.getStages())
 							.mapToDouble(buildFinalBacklogCalcFunc(
 									currentStepStartingPoint,
 									currentStepEndingPoint,
@@ -74,10 +74,10 @@ public interface BacklogProjectionCalculator {
 				return stage -> {
 					final double input;
 					final double output;
-					final var source = structure.sourceOf(stage);
+					final var source = behaviour.sourceOf(stage);
 					if (source.isEmpty()) {
 						input = plan.integrateForecastedInput(startingPoint, endingPoint);
-						output = structure.integrateFirstStageThroughput(plan, startingPoint, endingPoint);
+						output = behaviour.integrateFirstStageThroughput(plan, startingPoint, endingPoint);
 					} else {
 						input = plan.integrateThroughput(source.get(), startingPoint, endingPoint);
 						output = plan.integrateThroughput(stage, startingPoint, endingPoint);

@@ -31,7 +31,7 @@ public class BacklogProjectionUseCase {
 				startingBacklogSupplier.apply(workflow, requestClock.now()),
 				slasSupplier.apply(workflow, requestClock.now()),
 				staffingPlanSupplier.apply(workflow, requestClock.now()),
-				WorkflowStructure.from(workflow)
+				WorkflowBehaviour.from(workflow)
 		);
 	}
 
@@ -40,7 +40,7 @@ public class BacklogProjectionUseCase {
 	}
 
 	@Getter
-	enum WorkflowStructure implements Structure {
+	enum WorkflowBehaviour implements Behaviour {
 		inbound(ThroughputStrategies::backpressure, SlaDispersionStrategies::maximizeProductivity),
 		outboundDirect(ThroughputStrategies::pessimistic, SlaDispersionStrategies::minimizeProcessingTime),
 		outboundWall(ThroughputStrategies::average, SlaDispersionStrategies::maximizeProductivity);
@@ -49,7 +49,7 @@ public class BacklogProjectionUseCase {
 		private final ThroughputStrategy throughputStrategy;
 		private final SlaDispersionStrategy slaDispersionStrategy;
 
-		WorkflowStructure(ThroughputStrategy throughputStrategy, SlaDispersionStrategy bufferStrategy) {
+		WorkflowBehaviour(ThroughputStrategy throughputStrategy, SlaDispersionStrategy bufferStrategy) {
 			this.workflow = Workflow.valueOf(this.name());
 			this.throughputStrategy = throughputStrategy;
 			this.slaDispersionStrategy = bufferStrategy;
@@ -70,12 +70,12 @@ public class BacklogProjectionUseCase {
 			return throughputStrategy.calcCombinedThroughput(plan, workflow.stages, startingPoint, endingPoint);
 		}
 
-		static WorkflowStructure from(final Workflow workflow) {
-			return WorkflowStructure.valueOf(workflow.name());
+		static WorkflowBehaviour from(final Workflow workflow) {
+			return WorkflowBehaviour.valueOf(workflow.name());
 		}
 
 		static {
-			assert Arrays.stream(WorkflowStructure.values()).map(WorkflowStructure::name).collect(Collectors.toSet())
+			assert Arrays.stream(WorkflowBehaviour.values()).map(WorkflowBehaviour::name).collect(Collectors.toSet())
 					.equals(Arrays.stream(Workflow.values()).map(Workflow::name).collect(Collectors.toSet()));
 		}
 	}

@@ -24,7 +24,7 @@ public enum Workflow {
 	}
 
 	enum OutboundWallStages implements Stage {
-		pickingForWall, walling, packingWalled
+		wavingFowWall, pickingForWall, walling, packingWalled
 	}
 
 }
