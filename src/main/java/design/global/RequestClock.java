@@ -1,4 +1,4 @@
-package design.strategymethod;
+package design.global;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.annotation.RequestScope;

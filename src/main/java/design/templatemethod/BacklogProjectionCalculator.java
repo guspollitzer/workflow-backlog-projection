@@ -1,4 +1,4 @@
-package design.strategymethod;
+package design.templatemethod;
 
 import design.global.Workflow;
 import design.global.Workflow.Stage;
@@ -12,29 +12,28 @@ import java.util.Optional;
 import java.util.SortedSet;
 import java.util.function.ToDoubleFunction;
 
-interface BacklogProjectionCalculator {
+abstract class BacklogProjectionCalculator {
+
+	protected abstract Workflow getWorkflow();
+
+	protected abstract double calcCombinedThroughput(Plan plan, Stage stage, Instant startingPoint, Instant endingPoint);
+
+	protected abstract float[] calcProcessingProportions(Duration[] nextSlasDistances);
 
 	interface Forecast {
 		double integrateForecastedInput(Instant from, Instant to);
 	}
 
-	interface Behaviour<Plan> {
-		Workflow getWorkflow();
-
-		Optional<Stage> sourceOf(Stage stage);
-
-		double integrateThroughput(Plan plan, Stage stage, Instant startingPoint, Instant endingPoint);
-
-		float[] calcProcessingProportions(Duration[] nextSlasDistances);
+	interface Plan {
+		double integrateThroughput(Stage stage, Instant from, Instant to);
 	}
 
-	static <Plan> List<double[]> calculate(
+	List<double[]> calculate(
 			final Instant startingDate,
 			final int[] startingBacklog,
 			final SortedSet<Instant> inflectionPoints,
 			final Forecast forecast,
-			final Plan plan,
-			final Behaviour<Plan> behaviour
+			final Plan plan
 	) {
 		class LMC {
 			List<double[]> loop(
@@ -46,7 +45,7 @@ interface BacklogProjectionCalculator {
 					return alreadyCalculatedSteps;
 				} else {
 					final var currentStepEndingPoint = nextStepsStartingPoints.head();
-					final var currentStepEndingBacklog = Arrays.stream(behaviour.getWorkflow().stages)
+					final var currentStepEndingBacklog = Arrays.stream(getWorkflow().stages)
 							.mapToDouble(buildEndingBacklogCalcFunc(
 									currentStepStartingPoint,
 									currentStepEndingPoint,
@@ -68,10 +67,10 @@ interface BacklogProjectionCalculator {
 					final double[] startingBacklog
 			) {
 				return stage -> {
-					final double input = behaviour.sourceOf(stage)
-							.map(source ->  behaviour.integrateThroughput(plan, source, startingPoint, endingPoint))
+					final double input = sourceOf(stage)
+							.map(source ->  integrateThroughput(plan, source, startingPoint, endingPoint))
 							.orElse(forecast.integrateForecastedInput(startingPoint, endingPoint));
-					final double output = behaviour.integrateThroughput(plan, stage, startingPoint, endingPoint);
+					final double output = integrateThroughput(plan, stage, startingPoint, endingPoint);
 					final var current = startingBacklog[stage.ordinal()];
 					return Math.max(0, current + input - output);
 				};
@@ -80,5 +79,17 @@ interface BacklogProjectionCalculator {
 
 		final var initialBacklog = Arrays.stream(startingBacklog).mapToDouble(Math::floor).toArray();
 		return new LMC().loop(startingDate, List.iterableList(inflectionPoints), List.cons(initialBacklog, List.nil()));
+	}
+
+	private Optional<Stage> sourceOf(Stage stage) {
+		return stage.ordinal() == 0 ? Optional.empty() : Optional.of(getWorkflow().stages[stage.ordinal() - 1]);
+	}
+
+	private double integrateThroughput(Plan plan, Stage stage, Instant startingPoint, Instant endingPoint) {
+		if (stage.ordinal() == 0) {
+			return calcCombinedThroughput(plan, stage, startingPoint, endingPoint);
+		} else {
+			return plan.integrateThroughput(stage, startingPoint, endingPoint);
+		}
 	}
 }

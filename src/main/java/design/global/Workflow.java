@@ -1,4 +1,4 @@
-package design.strategymethod;
+package design.global;
 
 import lombok.RequiredArgsConstructor;
 
@@ -16,7 +16,7 @@ public enum Workflow {
 	}
 
 	enum InboundStages implements Stage {
-		receiving, checkIn, putAway
+		checkIn, putAway
 	}
 
 	enum OutboundDirectStages implements Stage {
