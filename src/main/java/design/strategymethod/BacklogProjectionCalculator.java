@@ -12,7 +12,7 @@ import java.util.Optional;
 import java.util.SortedSet;
 import java.util.function.ToDoubleFunction;
 
-interface BacklogProjectionCalculator {
+public interface BacklogProjectionCalculator {
 
 	interface Forecast {
 		double integrateForecastedInput(Instant from, Instant to);

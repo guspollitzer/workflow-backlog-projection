@@ -38,7 +38,7 @@ public class BacklogProjectionUseCase {
 		);
 	}
 
-	interface Plan {
+	public interface Plan {
 		double integrateThroughput(Stage stage, Instant from, Instant to);
 	}
 
@@ -51,7 +51,7 @@ public class BacklogProjectionUseCase {
 	}
 
 	@Getter
-	private enum WorkflowBehaviour implements Behaviour<Plan> {
+	enum WorkflowBehaviour implements Behaviour<Plan> {
 		inbound(ThroughputStrategies::self, SlaDispersionStrategies::maximizeProductivity),
 		outboundDirect(ThroughputStrategies::pessimistic, SlaDispersionStrategies::minimizeProcessingTime),
 		outboundWall(ThroughputStrategies::backpressure, SlaDispersionStrategies::maximizeProductivity);

@@ -12,7 +12,7 @@ import java.util.Optional;
 import java.util.SortedSet;
 import java.util.function.ToDoubleFunction;
 
-abstract class BacklogProjectionCalculator {
+public abstract class BacklogProjectionCalculator {
 
 	protected abstract Workflow getWorkflow();
 
@@ -20,11 +20,11 @@ abstract class BacklogProjectionCalculator {
 
 	protected abstract float[] calcProcessingProportions(Duration[] nextSlasDistances);
 
-	interface Forecast {
+	public interface Forecast {
 		double integrateForecastedInput(Instant from, Instant to);
 	}
 
-	interface Plan {
+	public interface Plan {
 		double integrateThroughput(Stage stage, Instant from, Instant to);
 	}
 
