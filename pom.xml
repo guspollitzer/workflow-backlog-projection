@@ -75,6 +75,13 @@
             <artifactId>vavr</artifactId>
             <version>0.10.4</version>
         </dependency>
+
+        <dependency>
+            <groupId>net.jqwik</groupId>
+            <artifactId>jqwik</artifactId>
+            <version>1.6.4</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

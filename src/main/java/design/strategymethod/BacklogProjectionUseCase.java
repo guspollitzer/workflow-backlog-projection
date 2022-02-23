@@ -1,5 +1,6 @@
 package design.strategymethod;
 
+import design.global.Workflow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -8,12 +9,13 @@ import fj.data.List;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static design.strategymethod.BacklogProjectionCalculator.*;
-import static design.strategymethod.Workflow.Stage;
+import static design.global.Workflow.Stage;
 
 @Service
 @RequiredArgsConstructor
@@ -21,32 +23,34 @@ public class BacklogProjectionUseCase {
 
 	private final RequestClock requestClock;
 	private final StaffingPlanGetter staffingPlanGetter;
-	private final Supplier<WorkflowBacklog> actualBacklogSupplier;
-	private final Supplier<Stream<Sla>> nextKnownSlasSupplier;
-	private final Supplier<ProcessedSlasDistributionDecider> processingStrategySupplier;
-	private final Supplier<BacklogBoundsDecider> backlogBoundsDeciderSupplier;
+	private final BiFunction<Workflow, Instant, WorkflowBacklog> actualBacklogSupplier;
+	private final BiFunction<Workflow, Instant, Stream<Sla>> nextKnownSlasSupplier;
+	private final BiFunction<Workflow, Instant, ProcessedSlasDistributionDecider> processingStrategySupplier;
+	private final BiFunction<Workflow, Instant, BacklogBoundsDecider> backlogBoundsDeciderSupplier;
 	private final Supplier<UpstreamThroughputTrajectory> upstreamThroughputTrajectorySupplier;
 
-	public List<WorkflowTrajectoryStep> execute(final Workflow workflow) {
+	public List<WorkflowTrajectoryStep> execute(final Workflow workflow, final Instant viewDate) {
+		var actualBacklog = actualBacklogSupplier.apply(workflow, viewDate);
+		var nextKnownSlas = nextKnownSlasSupplier.apply(workflow, viewDate);
+
 		final StrategiesByWorkflow strategies = StrategiesByWorkflow.from(workflow);
-
-		var actualBacklog = actualBacklogSupplier.get();
-		var nextKnownSlas = nextKnownSlasSupplier.get();
-
+		var behavior = new BehaviorStrategy(
+				strategies.firstStepBuilder,
+				strategies.nextStepBuilder,
+				processingStrategySupplier.apply(workflow, viewDate),
+				backlogBoundsDeciderSupplier.apply(workflow, viewDate)
+		);
 		var workflowTrajectory = buildWorkflowTrajectory(
 				requestClock.now(),
 				actualBacklog,
 				nextKnownSlas,
-				strategies.firstStepBuilder,
-				strategies.nextStepBuilder,
 				staffingPlanGetter.get(
 						requestClock.now(),
 						requestClock.now().plus(72, ChronoUnit.HOURS),
 						workflow.stages
 				),
-				processingStrategySupplier.get(),
-				backlogBoundsDeciderSupplier.get(),
-				upstreamThroughputTrajectorySupplier.get()
+				upstreamThroughputTrajectorySupplier.get(),
+				behavior
 		);
 		return workflowTrajectory;
 	}

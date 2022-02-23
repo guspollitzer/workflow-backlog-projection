@@ -1,6 +1,6 @@
 package design.strategymethod;
 
-import design.strategymethod.Workflow.Stage;
+import design.global.Workflow.Stage;
 
 import fj.Ord;
 import fj.P;
@@ -10,7 +10,6 @@ import fj.data.TreeMap;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -56,10 +55,6 @@ public interface BacklogProjectionCalculator {
 	 * Knows the staffing plan of a workflow.
 	 */
 	interface StaffingPlan {
-		Instant getEndingDate();
-
-		int getThroughput(Stage stage, Instant at);
-
 		/**
 		 * Calculates the integral of the throughput trajectory corresponding to the specified {@link Stage} on the specified interval.
 		 */
@@ -136,16 +131,20 @@ public interface BacklogProjectionCalculator {
 		);
 	}
 
+	record BehaviorStrategy(
+		WorkflowTrajectoryFirstStepBuilder firstStepBuilder,
+		WorkflowTrajectoryNextStepBuilder nextStepBuilder,
+		ProcessedSlasDistributionDecider processedSlasDistributionDecider,
+		BacklogBoundsDecider backlogBoundsDecider
+	) {}
+
 	static List<WorkflowTrajectoryStep> buildWorkflowTrajectory(
 			final Instant startingDate,
 			final WorkflowBacklog startingBacklog,
 			final Stream<Sla> nextKnownSlas,
-			final WorkflowTrajectoryFirstStepBuilder firstStepBuilder,
-			final WorkflowTrajectoryNextStepBuilder nextStepBuilder,
 			final StaffingPlan staffingPlan,
-			final ProcessedSlasDistributionDecider processedSlasDistributionDecider,
-			final BacklogBoundsDecider backlogBoundsDecider,
-			final UpstreamThroughputTrajectory upstreamThroughputTrajectory
+			final UpstreamThroughputTrajectory upstreamThroughputTrajectory,
+			final BehaviorStrategy behaviorStrategy
 	) {
 		final var allSlas = Stream
 				.concat(nextKnownSlas, startingBacklog.getSlas())
@@ -169,14 +168,14 @@ public interface BacklogProjectionCalculator {
 				if (remainingInflectionPoints.isEmpty()) {
 					return workflowTrajectory;
 				} else {
-					final var nextWorkflowStep = nextStepBuilder.build(
+					final var nextWorkflowStep = behaviorStrategy.nextStepBuilder.build(
 							stepStartingInstant,
 							remainingInflectionPoints.head(),
 							nextSlasByDeadline.splitLookup(stepStartingInstant)._3(),
 							workflowTrajectory.head(),
 							staffingPlan,
-							processedSlasDistributionDecider,
-							backlogBoundsDecider,
+							behaviorStrategy.processedSlasDistributionDecider,
+							behaviorStrategy.backlogBoundsDecider,
 							upstreamThroughputTrajectory
 					);
 					return calculateFollowingSteps(
@@ -191,20 +190,20 @@ public interface BacklogProjectionCalculator {
 		if (nextSlasByDeadline.isEmpty()) {
 			return List.nil();
 		} else {
-			final var processInflectionPoints = processedSlasDistributionDecider
+			final var processInflectionPoints = behaviorStrategy.processedSlasDistributionDecider
 					.getInflectionPointsBetween(startingDate, nextSlasByDeadline.maxKey().some())
 					.map(i -> P.p(i, List.<Sla>nil()))
 					.collect(Collectors.toList());
 			// TODO add the BacklogBoundsDecider inflection points
 			var inflectionPoints = nextSlasByDeadline.union(processInflectionPoints).keys();
-			final var firstWorkflowStep = firstStepBuilder.build(
+			final var firstWorkflowStep = behaviorStrategy.firstStepBuilder.build(
 					startingDate,
 					inflectionPoints.head(),
 					nextSlasByDeadline,
 					startingBacklog,
 					staffingPlan,
-					processedSlasDistributionDecider,
-					backlogBoundsDecider
+					behaviorStrategy.processedSlasDistributionDecider,
+					behaviorStrategy.backlogBoundsDecider
 			);
 			return new WorkflowTrajectoryBuilder().calculateFollowingSteps(
 					List.cons(firstWorkflowStep, List.nil()),

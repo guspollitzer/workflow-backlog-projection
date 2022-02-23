@@ -1,4 +1,4 @@
-package design.strategymethod;
+package design.global;
 
 import lombok.RequiredArgsConstructor;
 
@@ -19,14 +19,14 @@ public enum Workflow {
 //		}
 	}
 
-	 enum InboundStage implements Stage {
+	public enum InboundStage implements Stage {
 		checkIn, putAway;
 		public int workflowIndex() {
 			return inbound.ordinal();
 		}
 	}
 
-	enum OutboundDirectStage implements Stage {
+	public enum OutboundDirectStage implements Stage {
 		wavingDirect, pickingDirect, packingDirect;
 
 		@Override
@@ -35,7 +35,7 @@ public enum Workflow {
 		}
 	}
 
-	enum OutboundWallStage implements Stage {
+	public enum OutboundWallStage implements Stage {
 		wavingForWall, pickingForWall, walling, packingWalled;
 
 		@Override

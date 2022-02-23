@@ -1,7 +1,7 @@
 package design.strategymethod;
 
-import design.strategymethod.Workflow.OutboundWallStage;
-import design.strategymethod.Workflow.Stage;
+import design.global.Workflow.OutboundWallStage;
+import design.global.Workflow.Stage;
 
 import fj.data.List;
 import fj.data.TreeMap;
