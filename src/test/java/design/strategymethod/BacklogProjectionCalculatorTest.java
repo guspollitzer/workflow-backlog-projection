@@ -16,6 +16,7 @@ import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.Provide;
 import net.jqwik.api.ShrinkingMode;
+import net.jqwik.api.Tuple;
 import net.jqwik.api.statistics.Histogram;
 import net.jqwik.api.statistics.Statistics;
 import net.jqwik.api.statistics.StatisticsReport;
@@ -30,7 +31,6 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static design.global.TrajectoryTest.buildPartitionArbitrary;
 import static design.global.TrajectoryTest.buildTrajectoryArbitrary;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -122,5 +122,13 @@ class BacklogProjectionCalculatorTest {
 						))
 				)
 				.map(StaffingPlanSupplier.Plan::new);
+	}
+
+	public static Arbitrary<List<Instant>> buildPartitionArbitrary(Instant firstPointOfTrajectory, Instant lastPointOfTrajectory) {
+		return Arbitraries.frequencyOf(
+				Tuple.of(4, DateTimes.instants().between(firstPointOfTrajectory, lastPointOfTrajectory)),
+				Tuple.of(1, DateTimes.instants().atTheLatest(firstPointOfTrajectory)),
+				Tuple.of(1, DateTimes.instants().atTheEarliest(lastPointOfTrajectory))
+		).list().ofMinSize(3).ofMaxSize(7);
 	}
 }
