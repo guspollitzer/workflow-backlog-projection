@@ -18,6 +18,7 @@ public interface BacklogProjectionCalculator {
 		double integrateForecastedInput(Instant from, Instant to);
 	}
 
+	/** A strategy that parameterizes the behaviour of the {@link #calculate(Instant, int[], SortedSet, Forecast, Object, Behaviour)} method. */
 	interface Behaviour<Plan> {
 		Workflow getWorkflow();
 
@@ -28,6 +29,10 @@ public interface BacklogProjectionCalculator {
 		float[] calcProcessingProportions(Duration[] nextSlasDistances);
 	}
 
+	/** Estimates which will be the backlog of each stage at each `inflectionPoint`
+	 * @return the workflow's backlog at each inflection point ordered by the corresponding inflection point.
+	 * 		The workflow backlog is represented with an array where each element is the backlog of a {@link Stage} indexed by its ordinal.
+	 */
 	static <Plan> List<double[]> calculate(
 			final Instant startingDate,
 			final int[] startingBacklog,
@@ -45,12 +50,13 @@ public interface BacklogProjectionCalculator {
 				if (nextStepsStartingPoints.isEmpty()) {
 					return alreadyCalculatedSteps;
 				} else {
+					final var currentStepStartingBacklog = alreadyCalculatedSteps.head();
 					final var currentStepEndingPoint = nextStepsStartingPoints.head();
 					final var currentStepEndingBacklog = Arrays.stream(behaviour.getWorkflow().stages)
 							.mapToDouble(buildEndingBacklogCalcFunc(
 									currentStepStartingPoint,
 									currentStepEndingPoint,
-									alreadyCalculatedSteps.head()
+									currentStepStartingBacklog
 							))
 							.toArray();
 					return loop(

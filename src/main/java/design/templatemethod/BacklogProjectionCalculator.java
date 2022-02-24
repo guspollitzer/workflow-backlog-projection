@@ -28,6 +28,10 @@ public abstract class BacklogProjectionCalculator {
 		double integrateThroughput(Stage stage, Instant from, Instant to);
 	}
 
+	/** Estimates which will be the backlog of each stage at each `inflectionPoint`
+	 * @return the workflow's backlog at each inflection point ordered by the corresponding inflection point.
+	 * 		The workflow backlog is represented with an array where each element is the backlog of a {@link Stage} indexed by its ordinal.
+	 */
 	List<double[]> calculate(
 			final Instant startingDate,
 			final int[] startingBacklog,
