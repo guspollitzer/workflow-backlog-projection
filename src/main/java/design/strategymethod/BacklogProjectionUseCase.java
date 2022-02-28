@@ -1,6 +1,8 @@
 package design.strategymethod;
 
 import design.global.Workflow;
+import design.global.Workflow.OutboundDirectStage;
+import design.global.Workflow.OutboundWallStage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -10,11 +12,12 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static design.strategymethod.BacklogProjectionCalculator.*;
+import static design.strategymethod.BacklogTrajectoryEstimator.*;
 import static design.global.Workflow.Stage;
 
 @Service
@@ -33,54 +36,45 @@ public class BacklogProjectionUseCase {
 		var actualBacklog = actualBacklogSupplier.apply(workflow, viewDate);
 		var nextKnownSlas = nextKnownSlasSupplier.apply(workflow, viewDate);
 
-		final StrategiesByWorkflow strategies = StrategiesByWorkflow.from(workflow);
-		var behavior = new BehaviorStrategy(
-				strategies.firstStepBuilder,
-				strategies.nextStepBuilder,
-				processingStrategySupplier.apply(workflow, viewDate),
-				backlogBoundsDeciderSupplier.apply(workflow, viewDate)
-		);
-		var workflowTrajectory = buildWorkflowTrajectory(
-				requestClock.now(),
-				actualBacklog,
-				nextKnownSlas,
+		final StrategyByWorkflow strategy = StrategyByWorkflow.from(workflow);
+		var stepTranscendentalsInvariants = new StepTranscendentalInvariants(
+				workflow.processingStages,
+				upstreamThroughputTrajectorySupplier.get(),
 				staffingPlanGetter.get(
 						requestClock.now(),
 						requestClock.now().plus(72, ChronoUnit.HOURS),
-						workflow.stages
+						workflow.processingStages
 				),
-				upstreamThroughputTrajectorySupplier.get(),
-				behavior
+				processingStrategySupplier.apply(workflow, viewDate),
+				backlogBoundsDeciderSupplier.apply(workflow, viewDate)
 		);
-		return workflowTrajectory;
+		return estimateWorkflowTrajectory(
+				requestClock.now(),
+				actualBacklog,
+				nextKnownSlas,
+				strategy.stepEstimator,
+				stepTranscendentalsInvariants
+		);
 	}
 
 	interface StaffingPlanGetter {
-		BacklogProjectionCalculator.StaffingPlan get(Instant from, Instant to, Stage[] stages);
+		BacklogTrajectoryEstimator.StaffingPlan get(Instant from, Instant to, List<Stage> stages);
 	}
 
-	private enum StrategiesByWorkflow {
-		inbound(WorkflowTrajectoryBuilderStrategies::inboundFirstStepBuilder, WorkflowTrajectoryBuilderStrategies::inboundNextStepBuilder),
-		outboundDirect(WorkflowTrajectoryBuilderStrategies::dammedSourceFirstStepBuilder, WorkflowTrajectoryBuilderStrategies::dammedSourceNextStepBuilder),
-		outboundWall(WorkflowTrajectoryBuilderStrategies::dammedSourceFirstStepBuilder, WorkflowTrajectoryBuilderStrategies::dammedSourceNextStepBuilder);
+	@RequiredArgsConstructor
+	private enum StrategyByWorkflow {
+		inbound(WorkflowTrajectoryStepEstimators::estimateWavelessStep),
+		outboundDirect(estimators -> estimators.estimateWavefullStep(OutboundDirectStage.wavingDirect)),
+		outboundWall(estimators -> estimators.estimateWavefullStep(OutboundWallStage.wavingForWall));
 
-		private final WorkflowTrajectoryFirstStepBuilder firstStepBuilder;
-		private final WorkflowTrajectoryNextStepBuilder nextStepBuilder;
+		private final Function<WorkflowTrajectoryStepEstimators, WorkflowTrajectoryStep> stepEstimator;
 
-		StrategiesByWorkflow(
-				WorkflowTrajectoryFirstStepBuilder firstStepBuilder,
-				WorkflowTrajectoryNextStepBuilder nextStepBuilder
-		) {
-			this.firstStepBuilder = firstStepBuilder;
-			this.nextStepBuilder = nextStepBuilder;
-		}
-
-		static StrategiesByWorkflow from(final Workflow workflow) {
-			return StrategiesByWorkflow.valueOf(workflow.name());
+		static StrategyByWorkflow from(final Workflow workflow) {
+			return StrategyByWorkflow.valueOf(workflow.name());
 		}
 
 		static {
-			assert Arrays.stream(StrategiesByWorkflow.values()).map(StrategiesByWorkflow::name).collect(Collectors.toSet())
+			assert Arrays.stream(StrategyByWorkflow.values()).map(StrategyByWorkflow::name).collect(Collectors.toSet())
 					.equals(Arrays.stream(Workflow.values()).map(Workflow::name).collect(Collectors.toSet()));
 		}
 	}

@@ -1,7 +1,7 @@
 package design.global;
 
 import design.global.Workflow.Stage;
-import design.strategymethod.BacklogProjectionCalculator.StaffingPlan;
+import design.strategymethod.BacklogTrajectoryEstimator.StaffingPlan;
 
 import java.time.Instant;
 import java.util.Map;

@@ -1,28 +1,33 @@
 package design.global;
 
-import lombok.RequiredArgsConstructor;
+import fj.data.List;
 
-@RequiredArgsConstructor
 public enum Workflow {
-	inbound(InboundStage.values()),
-	outboundDirect(OutboundDirectStage.values()),
-	outboundWall(OutboundWallStage.values());
+	inbound(false, InboundStage.values()),
+	outboundDirect(true, OutboundDirectStage.values()),
+	outboundWall(true, OutboundWallStage.values());
 
+	public final boolean hasWaving;
 	public final Stage[] stages;
+	public List<Stage> processingStages;
+
+	Workflow(final boolean hasWaving, final Stage[] stages) {
+		this.hasWaving = hasWaving;
+		this.stages = stages;
+		var list = List.arrayList(this.stages);
+		this.processingStages = this.hasWaving ? list.tail() : list;
+	}
 
 	public interface Stage {
 		String name();
 		int ordinal();
-		int workflowIndex();
-//		default int compareTo(Stage o) {
-//			return ordinal() - o.ordinal();
-//		}
+		Workflow workflow();
 	}
 
 	public enum InboundStage implements Stage {
 		checkIn, putAway;
-		public int workflowIndex() {
-			return inbound.ordinal();
+		public Workflow workflow() {
+			return inbound;
 		}
 	}
 
@@ -30,8 +35,8 @@ public enum Workflow {
 		wavingDirect, pickingDirect, packingDirect;
 
 		@Override
-		public int workflowIndex() {
-			return outboundDirect.ordinal();
+		public Workflow workflow() {
+			return outboundDirect;
 		}
 	}
 
@@ -39,8 +44,8 @@ public enum Workflow {
 		wavingForWall, pickingForWall, walling, packingWalled;
 
 		@Override
-		public int workflowIndex() {
-			return outboundWall.ordinal();
+		public Workflow workflow() {
+			return outboundWall;
 		}
 	}
 

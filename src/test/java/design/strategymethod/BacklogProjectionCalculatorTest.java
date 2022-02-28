@@ -5,8 +5,8 @@ import design.global.ForecastSupplier;
 import design.global.StaffingPlanSupplier;
 import design.global.Trajectory;
 import design.global.Workflow;
-import design.strategymethod.BacklogProjectionCalculator.Behaviour;
-import design.strategymethod.BacklogProjectionCalculator.Forecast;
+import design.strategymethod.BacklogTrajectoryEstimator.Behaviour;
+import design.strategymethod.BacklogTrajectoryEstimator.Forecast;
 import design.strategymethod.BacklogProjectionUseCase.Plan;
 import net.jqwik.api.AfterFailureMode;
 import net.jqwik.api.Arbitraries;
@@ -44,7 +44,7 @@ class BacklogProjectionCalculatorTest {
 	@Property(shrinking = ShrinkingMode.BOUNDED, afterFailure = AfterFailureMode.PREVIOUS_SEED)
 	@StatisticsReport(format = Histogram.class)
 	void theProjectedBacklogShouldBeIndependentOfTheSetOfInflectionPointsAsLongAsTheInvolvedFunctionsBehaveLinearly(@ForAll("testDataSupplier") TestData td) {
-		var workflowBacklogTrajectoryReversed = BacklogProjectionCalculator.calculate(td.startingDate, td.startingBacklog, td.inflectionPoints, td.forecast, td.plan, td.behaviour);
+		var workflowBacklogTrajectoryReversed = BacklogTrajectoryEstimator.calculate(td.startingDate, td.startingBacklog, td.inflectionPoints, td.forecast, td.plan, td.behaviour);
 		var workflowFinalBacklog1 = workflowBacklogTrajectoryReversed.head();
 		var workflowBacklogTrajectoryInit = workflowBacklogTrajectoryReversed.tail().reverse();
 		Assume.that(
@@ -57,7 +57,7 @@ class BacklogProjectionCalculatorTest {
 		Arbitraries.lazy(() -> inflectionPointsInitSubsetsArbitrary).forEachValue(subset -> {
 			var ip = new TreeSet<>(subset);
 			ip.add(lastInflectionPoint);
-			var workflowBacklogIncompleteTrajectoryReversed = BacklogProjectionCalculator.calculate(td.startingDate, td.startingBacklog, ip, td.forecast, td.plan, td.behaviour);
+			var workflowBacklogIncompleteTrajectoryReversed = BacklogTrajectoryEstimator.calculate(td.startingDate, td.startingBacklog, ip, td.forecast, td.plan, td.behaviour);
 			var workflowFinalBacklog2 = workflowBacklogIncompleteTrajectoryReversed.head();
 
 			if (HISTOGRAM_MODE) {
