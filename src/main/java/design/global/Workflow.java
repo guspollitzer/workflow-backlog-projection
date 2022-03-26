@@ -1,5 +1,8 @@
 package design.global;
 
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
 import fj.data.List;
 
 public enum Workflow {
@@ -20,19 +23,26 @@ public enum Workflow {
 
 	public interface Stage {
 		String name();
+		boolean isHumanPowered();
 		int ordinal();
 		Workflow workflow();
 	}
 
+	@Getter
+	@RequiredArgsConstructor
 	public enum InboundStage implements Stage {
-		checkIn, putAway;
+		checkIn(true), putAway(true);
+		final boolean humanPowered;
 		public Workflow workflow() {
 			return inbound;
 		}
 	}
 
+	@Getter
+	@RequiredArgsConstructor
 	public enum OutboundDirectStage implements Stage {
-		wavingDirect, pickingDirect, packingDirect;
+		wavingDirect(false), pickingDirect(true), packingDirect(true);
+		final boolean humanPowered;
 
 		@Override
 		public Workflow workflow() {
@@ -40,8 +50,11 @@ public enum Workflow {
 		}
 	}
 
+	@Getter
+	@RequiredArgsConstructor
 	public enum OutboundWallStage implements Stage {
-		wavingForWall, pickingForWall, walling, packingWalled;
+		wavingForWall(false), pickingForWall(true), walling(true), packingWalled(true);
+		final boolean humanPowered;
 
 		@Override
 		public Workflow workflow() {

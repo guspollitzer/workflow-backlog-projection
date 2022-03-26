@@ -99,12 +99,19 @@ public class BacklogTrajectoryEstimator {
 		 * The caller compromise is that the interval {@code (start,end)} should not contain any of the inflection points returned by
 		 * {@link #getInflectionPointsBetween(Instant, Instant)}.
 		 */
-		Heap decide(Stage stage, Heap initialHeap, long processedQuantity, Instant start, Instant end, TreeMap<Instant, List<Sla>> nextSlasByDeadline);
+		Heap decide(
+				Stage stage, Heap initialHeap,
+				long processedQuantity,
+				Instant start,
+				Instant end,
+				TreeMap<Instant, List<Sla>> nextSlasByDeadline
+		);
 
 		Stream<Instant> getInflectionPointsBetween(Instant from, Instant to);
 	}
 
 	public interface BacklogBoundsDecider {
+		// TODO Only the desired buffer size of the waving stage is needed here. So, perhaps, it would be clearer to remove the `stage` parameter.
 		Duration getDesiredBufferSize(Stage stage, Instant when, TreeMap<Instant, List<Sla>> nextSlasByDeadline);
 
 		Stream<Instant> getInflectionPointsBetween(Instant from, Instant to);
@@ -116,7 +123,14 @@ public class BacklogTrajectoryEstimator {
 	 * @param initialHeap the actual backlog at the {@link Stage} when the step started.
 	 * @param processedHeap the amount of units processed during this step.
 	 */
-	public record StageTrajectoryStep(Stage stage, Heap initialHeap, Heap incomingHeap, Heap processedHeap, long processedTotal) {
+	public record StageTrajectoryStep(
+			Stage stage,
+			Heap initialHeap,
+			Heap incomingHeap,
+			Heap processedHeap,
+			long processedTotal,
+			long heapShortage
+	) {
 		public Heap finalHeap() {
 			return initialHeap.plus(incomingHeap).minus(processedHeap);
 		}
@@ -125,7 +139,12 @@ public class BacklogTrajectoryEstimator {
 	/**
 	 * Knows relevant information about a step of an estimated trajectory of a workflow's backlog.
 	 */
-	public record WorkflowTrajectoryStep(Instant startingDate, List<StageTrajectoryStep> stagesStep) {
+	public record WorkflowTrajectoryStep(
+			Instant startingDate,
+			Instant endingDate,
+			List<StageTrajectoryStep> stagesStep,
+			TreeMap<Instant, List<Sla>> nextSlasByDeadline
+	) {
 		WorkflowBacklog finalBacklog() {
 			return stage -> stagesStep.find(s -> s.stage == stage)
 					.map(StageTrajectoryStep::finalHeap)
@@ -214,7 +233,7 @@ public class BacklogTrajectoryEstimator {
 					List.cons(firstWorkflowStep, List.nil()),
 					inflectionPoints.head(),
 					inflectionPoints.tail()
-			);
+			).reverse();
 		}
 	}
 
