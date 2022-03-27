@@ -1,4 +1,4 @@
-package design.strategymethod;
+package design.backlogprojection;
 
 import design.global.Workflow.Stage;
 import lombok.RequiredArgsConstructor;
@@ -8,7 +8,7 @@ import fj.data.TreeMap;
 
 import java.time.Instant;
 
-import static design.strategymethod.BacklogTrajectoryEstimator.*;
+import static design.backlogprojection.BacklogTrajectoryEstimator.*;
 
 /** Contains pure functions that estimate the workflow backlog at an instant based on the backlog at a previous instant and the specified contextual parameters.
  * Each of the contained pure function is designed to work only for a specific workflow configuration.

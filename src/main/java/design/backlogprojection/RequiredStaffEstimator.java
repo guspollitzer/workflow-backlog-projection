@@ -1,4 +1,4 @@
-package design.strategymethod;
+package design.backlogprojection;
 
 import design.global.Workflow;
 import design.global.Workflow.Stage;

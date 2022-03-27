@@ -1,4 +1,4 @@
-package design.strategymethod;
+package design.backlogprojection;
 
 import design.global.Workflow;
 import design.global.Workflow.OutboundDirectStage;
@@ -17,7 +17,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static design.strategymethod.BacklogTrajectoryEstimator.*;
+import static design.backlogprojection.BacklogTrajectoryEstimator.*;
 import static design.global.Workflow.Stage;
 
 @Service

@@ -1,9 +1,9 @@
-package design.strategymethod;
+package design.backlogprojection;
 
 import design.global.Workflow.Stage;
-import design.strategymethod.BacklogTrajectoryEstimator.Sla;
-import design.strategymethod.BacklogTrajectoryEstimator.StageTrajectoryStep;
-import design.strategymethod.BacklogTrajectoryEstimator.WorkflowTrajectoryStep;
+import design.backlogprojection.BacklogTrajectoryEstimator.Sla;
+import design.backlogprojection.BacklogTrajectoryEstimator.StageTrajectoryStep;
+import design.backlogprojection.BacklogTrajectoryEstimator.WorkflowTrajectoryStep;
 import lombok.RequiredArgsConstructor;
 
 import fj.data.List;
