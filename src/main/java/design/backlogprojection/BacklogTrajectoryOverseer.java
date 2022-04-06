@@ -110,7 +110,7 @@ class BacklogTrajectoryOverseer {
 								rawStageStep.stage(),
 								stepStartingDate,
 								stepEndingDate.plus(desiredBufferSize)
-						) - rawStageStep.initialHeap().total();
+						) - rawStageStep.initialQueue().total();
 						final var desiredUpstreamPower = Math.max(0, Math.round(unboundedDesiredUpstreamPower));
 						final var oversawStep = new StageTrajectoryOversawStep(rawStageStep, desiredHeadcount);
 						return overseeStep(

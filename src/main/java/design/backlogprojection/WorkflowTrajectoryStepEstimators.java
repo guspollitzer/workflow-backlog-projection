@@ -27,35 +27,35 @@ class WorkflowTrajectoryStepEstimators {
 	WorkflowTrajectoryStep estimateWavefullStep(final Stage wavingStage) {
 		// calculate the waving desired power (integral on [startingInstant, endingInstant] of the waving throughput)
 		final var firstProcessingStage = transcendentals.processingStages().head();
-		final var firstProcessingStageInitialHeap = stepStartingBacklog.getHeapAt(firstProcessingStage);
-		final var firstProcessingStageInitialHeapTotal = firstProcessingStageInitialHeap.total();
+		final var firstProcessingStageInitialQueue = stepStartingBacklog.getQueueAt(firstProcessingStage);
+		final var firstProcessingStageInitialQueueTotal = firstProcessingStageInitialQueue.total();
 		final var firstProcessingStageDesiredBufferSize =
 				transcendentals.backlogBoundsDecider().getDesiredBufferSize(firstProcessingStage, stepStartingDate, nextSlasByDeadline);
 		final var wavingDesiredPower = Math.round(transcendentals.staffingPlan().integrateThroughputOf(
 				firstProcessingStage, stepStartingDate, stepEndingDate.plus(firstProcessingStageDesiredBufferSize)
-		)) - firstProcessingStageInitialHeapTotal;
+		)) - firstProcessingStageInitialQueueTotal;
 
 		// calculate the waving achievable power
-		final var wavingInitialHeap = stepStartingBacklog.getHeapAt(wavingStage);
-		final var wavingAchievablePower = Math.max(0, Math.min(wavingInitialHeap.total(), wavingDesiredPower)); // TODO hay que sumar el forecast acá, o no? No lo sumé porque, a diferencia de las otras etapas, en waving la cantidad procesada depende del tamaño de la ola y dicho tamaña se calcula a lo que hay en ready-to-wave al comienzo del intervalo.
-		final var wavingAchievableHeap = transcendentals.processedSlasDistributionDecider()
-				.decide(wavingStage, wavingInitialHeap, wavingAchievablePower, stepStartingDate, stepEndingDate, nextSlasByDeadline);
-		assert wavingAchievablePower == wavingAchievableHeap.total();
+		final var wavingInitialQueue = stepStartingBacklog.getQueueAt(wavingStage);
+		final var wavingAchievablePower = Math.max(0, Math.min(wavingInitialQueue.total(), wavingDesiredPower)); // TODO hay que sumar el forecast acá, o no? No lo sumé porque, a diferencia de las otras etapas, en waving la cantidad procesada depende del tamaño de la ola y dicho tamaña se calcula a lo que hay en ready-to-wave al comienzo del intervalo.
+		final var wavingAchievableQueue = transcendentals.processingOrderCriteria()
+				.decide(wavingStage, wavingInitialQueue, wavingAchievablePower, stepStartingDate, stepEndingDate, nextSlasByDeadline);
+		assert wavingAchievablePower == wavingAchievableQueue.total();
 
 		// build the wavingSimulationStep
-		final var upstreamHeap = transcendentals.upstreamThroughputTrajectory().integral(stepStartingDate, stepEndingDate);
+		final var upstreamQueue = transcendentals.upstreamThroughputTrajectory().integral(stepStartingDate, stepEndingDate);
 		final var wavingTrajectoryStep = new StageTrajectoryStep(
 				wavingStage,
-				wavingInitialHeap,
-				upstreamHeap,
-				wavingAchievableHeap,
+				wavingInitialQueue,
+				upstreamQueue,
+				wavingAchievableQueue,
 				wavingAchievablePower,
 				Math.max(0, wavingDesiredPower - wavingAchievablePower)
 		);
 
 		// estimate the step of each processing stage
 		final var processingStagesTrajectoryStep =
-				estimateProcessingStagesStep(transcendentals.processingStages(), wavingAchievableHeap, wavingAchievablePower, List.nil());
+				estimateProcessingStagesStep(transcendentals.processingStages(), wavingAchievableQueue, wavingAchievablePower, List.nil());
 		// return the estimated trajectory step
 		return new WorkflowTrajectoryStep(
 				stepStartingDate,
@@ -66,10 +66,10 @@ class WorkflowTrajectoryStepEstimators {
 	}
 
 	WorkflowTrajectoryStep estimateWavelessStep() {
-		var incomingHeap = transcendentals.upstreamThroughputTrajectory().integral(stepStartingDate, stepEndingDate);
+		var incomingQueue = transcendentals.upstreamThroughputTrajectory().integral(stepStartingDate, stepEndingDate);
 		// calculate simulation of processing steps
 		final var stagesTrajectoryStep =
-				estimateProcessingStagesStep(transcendentals.processingStages(), incomingHeap, incomingHeap.total(), List.nil());
+				estimateProcessingStagesStep(transcendentals.processingStages(), incomingQueue, incomingQueue.total(), List.nil());
 		return new WorkflowTrajectoryStep(stepStartingDate, stepEndingDate, stagesTrajectoryStep, nextSlasByDeadline);
 	}
 
@@ -79,7 +79,7 @@ class WorkflowTrajectoryStepEstimators {
 	 */
 	private List<StageTrajectoryStep> estimateProcessingStagesStep(
 			final List<Stage> remainingStages,
-			final Heap stageStepIncomingHeap,
+			final Queue stageStepIncomingQueue,
 			final long stageStepIncomingTotal,
 			final List<StageTrajectoryStep> alreadyEstimatedStages
 	) {
@@ -87,25 +87,25 @@ class WorkflowTrajectoryStepEstimators {
 			return alreadyEstimatedStages;
 		} else {
 			final var stage = remainingStages.head();
-			final var stageStepStartingHeap = stepStartingBacklog.getHeapAt(stage);
-			final var maxProcessedTotal = stageStepIncomingTotal + stageStepStartingHeap.total();
+			final var stageStepStartingQueue = stepStartingBacklog.getQueueAt(stage);
+			final var maxProcessedTotal = stageStepIncomingTotal + stageStepStartingQueue.total();
 			final var processingPower = Math.round(transcendentals.staffingPlan().integrateThroughputOf(stage, stepStartingDate, stepEndingDate));
-			final var heapShortage = processingPower - maxProcessedTotal;
+			final var queueShortage = processingPower - maxProcessedTotal;
 			final var processedTotal = Math.min(maxProcessedTotal, processingPower);
-			final var processedHeap = transcendentals.processedSlasDistributionDecider()
-					.decide(stage, stageStepStartingHeap, processedTotal, stepStartingDate, stepEndingDate, nextSlasByDeadline);
-			assert processedTotal == processedHeap.total();
+			final var processedQueue = transcendentals.processingOrderCriteria()
+					.decide(stage, stageStepStartingQueue, processedTotal, stepStartingDate, stepEndingDate, nextSlasByDeadline);
+			assert processedTotal == processedQueue.total();
 			var stageTrajectoryStep = new StageTrajectoryStep(
 					stage,
-					stageStepStartingHeap,
-					stageStepIncomingHeap,
-					processedHeap,
+					stageStepStartingQueue,
+					stageStepIncomingQueue,
+					processedQueue,
 					processedTotal,
-					heapShortage
+					queueShortage
 			);
 			return estimateProcessingStagesStep(
 					remainingStages.tail(),
-					processedHeap,
+					processedQueue,
 					processedTotal,
 					List.cons(stageTrajectoryStep, alreadyEstimatedStages)
 			);

@@ -8,13 +8,13 @@ import fj.data.TreeMap;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-/** Contains a pure function that estimates the backlog trajectory of a workflow and the contract specification. */
+/**
+ * Contains a pure function that estimates the backlog trajectory of a workflow and the contract specification.
+ */
 public class BacklogTrajectoryEstimator {
 	private BacklogTrajectoryEstimator() {}
 
@@ -28,41 +28,33 @@ public class BacklogTrajectoryEstimator {
 		Instant getDeadline();
 	}
 
-	/** Specifies how {@link BacklogTrajectoryEstimator} expects a stage's heap (or backlog of a single stage) be represented. */
-	public record Heap(Map<Sla, Integer> quantityBySla) {
-		static final Heap EMPTY = new Heap(Map.of());
+	/**
+	 * Specifies how the {@link BacklogTrajectoryEstimator} represents a queue of otherwise indistinguishable units that are consecutively
+	 * processed, and the operations that it needs to apply on them.
+	 * The instances must be immutable.
+	 */
+	public interface Queue {
+		/** The number of units contained in this queue. */
+		int total();
 
-		int total() {
-			return quantityBySla.values().stream().mapToInt(Integer::intValue).sum();
-		}
+		/** Should return a {@link Queue} that consists of the units in this queue followed by the units in the received queue, such that:
+		 * {@code queueA.plus(queueB).total() == queueA.total() + queueB.total();}. */
+		Queue append(final Queue other);
 
-		Heap plus(final Heap other) {
-			var mergedPiles = Stream.concat(
-							quantityBySla.entrySet().stream(),
-							other.quantityBySla.entrySet().stream()
-					)
-					.collect(Collectors.toMap(Entry::getKey, Entry::getValue, Integer::sum));
-			return new Heap(mergedPiles);
-		}
-
-		public Heap minus(Heap other) {
-			return this.plus(other.negated());
-		}
-
-		Heap negated() {
-			return new Heap(
-					this.quantityBySla.entrySet().stream().collect(Collectors.toMap(
-							Map.Entry::getKey,
-							e -> -e.getValue()
-					))
-			);
-		}
+		/** Should return a {@link Queue} that consists of the units of this queue with the units contained in the received queue removed;
+		 * such that:
+		 * {@code queueA.minus(queueA).total() == 0; }
+		 *
+		 * Note that the responsibility to ensure that the received {@link Queue} contains the first units of this {@link Queue} is of the
+		 * {@link ProcessingOrderCriteria} implementation. */
+		Queue consume(Queue other);
 	}
 
 	/**
-	 * Specifies what the {@link BacklogTrajectoryEstimator} needs to know about a workflow's backlog. */
+	 * Specifies what the {@link BacklogTrajectoryEstimator} needs to know about a workflow's backlog.
+	 */
 	public interface WorkflowBacklog {
-		Heap getHeapAt(Stage stage);
+		Queue getQueueAt(Stage stage);
 	}
 
 	/**
@@ -82,25 +74,32 @@ public class BacklogTrajectoryEstimator {
 		/**
 		 * Calculates the definite integral of this vectorial trajectory on the specified interval.
 		 */
-		Heap integral(Instant from, Instant to);
+		Queue integral(Instant from, Instant to);
 	}
 
 	/**
-	 * Specifies what the {@link BacklogTrajectoryEstimator} needs to know about how to distribute the processing power of each stage along
-	 * the SLAs that compose the stage's backlog ({@link Heap}).
-	 * The implementation is responsible to match as much as possible the order in which the units would be processed as a result of the
-	 * waves timing. */
-	public interface ProcessedSlasDistributionDecider {
+	 * Specifies what the {@link BacklogTrajectoryEstimator} needs to know about the processing order criteria of each stage's backlog.
+	 * Note
+	 * that the backlog of every stage should implement the {@link Queue} interface.
+	 */
+	public interface ProcessingOrderCriteria {
+
 		/**
-		 * The implementation should return a {@link Heap} {@code result} such that:
+		 * Should return an empty {@link Queue}, such that {@code aQueue.plus(emptyQueue()).equals(aQueue)}.
+		 */
+		Queue emptyQueue();
+
+		/**
+		 * The implementation should return a {@link Queue} {@code result} such that:
 		 * <p>(1) {@code result.total() = processedQuantity}
-		 * <p>(2) {@code result.get(sla) <= initialHeap.get(sla)} for all slas.
+		 * <p>(2) {@code result.get(sla) <= initialQueue.get(sla)} for all slas.
 		 * <p>The number of units that are processed for each SLA is an implementation decision.
 		 * The caller compromise is that the interval {@code (start,end)} should not contain any of the inflection points returned by
-		 * {@link #getInflectionPointsBetween(Instant, Instant)}.
+		 * {@link
+		 * #getInflectionPointsBetween(Instant, Instant)}.
 		 */
-		Heap decide(
-				Stage stage, Heap initialHeap,
+		Queue decide(
+				Stage stage, Queue initialQueue,
 				long processedQuantity,
 				Instant start,
 				Instant end,
@@ -111,7 +110,8 @@ public class BacklogTrajectoryEstimator {
 	}
 
 	public interface BacklogBoundsDecider {
-		// TODO Only the desired buffer size of the waving stage is needed here. So, perhaps, it would be clearer to remove the `stage` parameter.
+		// TODO Only the desired buffer size of the waving stage is needed here. So, perhaps, it would be clearer to remove the `stage`
+		//  parameter.
 		Duration getDesiredBufferSize(Stage stage, Instant when, TreeMap<Instant, List<Sla>> nextSlasByDeadline);
 
 		Stream<Instant> getInflectionPointsBetween(Instant from, Instant to);
@@ -120,19 +120,19 @@ public class BacklogTrajectoryEstimator {
 	/**
 	 * Knows relevant information about a step of an estimated trajectory of a stage's backlog.
 	 * @param stage the {@link Stage} this step corresponds to.
-	 * @param initialHeap the actual backlog at the {@link Stage} when the step started.
-	 * @param processedHeap the amount of units processed during this step.
+	 * @param initialQueue the actual backlog at the {@link Stage} when the step started.
+	 * @param processedQueue the amount of units processed during this step.
 	 */
 	public record StageTrajectoryStep(
 			Stage stage,
-			Heap initialHeap,
-			Heap incomingHeap,
-			Heap processedHeap,
+			Queue initialQueue,
+			Queue incomingQueue,
+			Queue processedQueue,
 			long processedTotal,
-			long heapShortage
+			long queueShortage
 	) {
-		public Heap finalHeap() {
-			return initialHeap.plus(incomingHeap).minus(processedHeap);
+		public Queue finalQueue() {
+			return initialQueue.append(incomingQueue).consume(processedQueue);
 		}
 	}
 
@@ -144,13 +144,7 @@ public class BacklogTrajectoryEstimator {
 			Instant endingDate,
 			List<StageTrajectoryStep> stagesStep,
 			TreeMap<Instant, List<Sla>> nextSlasByDeadline
-	) {
-		WorkflowBacklog finalBacklog() {
-			return stage -> stagesStep.find(s -> s.stage == stage)
-					.map(StageTrajectoryStep::finalHeap)
-					.orSome(Heap.EMPTY);
-		}
-	}
+	) {}
 
 	/**
 	 * Parameters, whose invariability transcend the estimation steps, of a workflow-backlog's trajectory-simulator.
@@ -159,11 +153,13 @@ public class BacklogTrajectoryEstimator {
 			List<Stage> processingStages,
 			UpstreamThroughputTrajectory upstreamThroughputTrajectory,
 			StaffingPlan staffingPlan,
-			ProcessedSlasDistributionDecider processedSlasDistributionDecider,
+			ProcessingOrderCriteria processingOrderCriteria,
 			BacklogBoundsDecider backlogBoundsDecider
 	) {}
 
-	/** Creates a trajectory of a workflow's backlog based on the specified context. */
+	/**
+	 * Creates a trajectory of a workflow's backlog based on the specified context.
+	 */
 	static List<WorkflowTrajectoryStep> estimateWorkflowTrajectory(
 			final Instant startingDate,
 			final WorkflowBacklog startingBacklog,
@@ -192,10 +188,15 @@ public class BacklogTrajectoryEstimator {
 				if (remainingInflectionPoints.isEmpty()) {
 					return alreadyCalculatedSteps;
 				} else {
+					final WorkflowBacklog stepStartingBacklog = stage -> alreadyCalculatedSteps.head()
+							.stagesStep.find(s -> s.stage == stage)
+							.map(StageTrajectoryStep::finalQueue)
+							.orSome(transcendentals.processingOrderCriteria.emptyQueue());
+
 					final var nextWorkflowStep = stepEstimator.apply(new WorkflowTrajectoryStepEstimators(
 							stepStartingInstant,
 							remainingInflectionPoints.head(),
-							alreadyCalculatedSteps.head().finalBacklog(),
+							stepStartingBacklog,
 							nextSlasByDeadline.splitLookup(stepStartingInstant)._3(),
 							transcendentals
 					));
@@ -214,7 +215,7 @@ public class BacklogTrajectoryEstimator {
 			final var lastDeadline = nextSlasByDeadline.maxKey().some();
 			var inflectionPoints = List.arrayList(
 					Stream.concat(
-							transcendentals.processedSlasDistributionDecider.getInflectionPointsBetween(startingDate, lastDeadline),
+							transcendentals.processingOrderCriteria.getInflectionPointsBetween(startingDate, lastDeadline),
 							Stream.concat(
 									nextSlasByDeadline.keys().toCollection().stream(),
 									transcendentals.backlogBoundsDecider.getInflectionPointsBetween(startingDate, lastDeadline)

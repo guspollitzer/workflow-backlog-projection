@@ -28,7 +28,7 @@ public class BacklogProjectionUseCase {
 	private final StaffingPlanGetter staffingPlanGetter;
 	private final BiFunction<Workflow, Instant, WorkflowBacklog> actualBacklogSupplier;
 	private final BiFunction<Workflow, Instant, Stream<Sla>> nextKnownSlasSupplier;
-	private final BiFunction<Workflow, Instant, ProcessedSlasDistributionDecider> processingStrategySupplier;
+	private final BiFunction<Workflow, Instant, ProcessingOrderCriteria> processingStrategySupplier;
 	private final BiFunction<Workflow, Instant, BacklogBoundsDecider> backlogBoundsDeciderSupplier;
 	private final Supplier<UpstreamThroughputTrajectory> upstreamThroughputTrajectorySupplier;
 
