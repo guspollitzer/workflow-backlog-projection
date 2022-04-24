@@ -11,17 +11,17 @@ import java.time.Instant;
 @Component
 @RequestScope
 public class RequestClock {
-	private final Instant requestInstant;
+  private final Instant requestInstant;
 
-	public RequestClock() {
-		requestInstant = Instant.now();
-	}
+  public RequestClock() {
+	requestInstant = Instant.now();
+  }
 
-	/**
-	 * Gives the instant when the request associated to this thread was received.
-	 * @return the instant when the request was received.
-	 */
-	public Instant now() {
-		return requestInstant;
-	}
+  /**
+   * Gives the instant when the request associated to this thread was received.
+   * @return the instant when the request was received.
+   */
+  public Instant now() {
+	return requestInstant;
+  }
 }

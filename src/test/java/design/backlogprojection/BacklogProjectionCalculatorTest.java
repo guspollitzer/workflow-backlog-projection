@@ -43,12 +43,15 @@ class BacklogProjectionCalculatorTest {
 //	@Property(shrinking = ShrinkingMode.OFF, afterFailure = AfterFailureMode.SAMPLE_ONLY)
 	@Property(shrinking = ShrinkingMode.BOUNDED, afterFailure = AfterFailureMode.PREVIOUS_SEED)
 	@StatisticsReport(format = Histogram.class)
-	void theProjectedBacklogShouldBeIndependentOfTheSetOfInflectionPointsAsLongAsTheInvolvedFunctionsBehaveLinearly(@ForAll("testDataSupplier") TestData td) {
-		var workflowBacklogTrajectoryReversed = BacklogTrajectoryEstimator.calculate(td.startingDate, td.startingBacklog, td.inflectionPoints, td.forecast, td.plan, td.behaviour);
+	void theProjectedBacklogShouldBeIndependentOfTheSetOfInflectionPointsAsLongAsTheInvolvedFunctionsBehaveLinearly(@ForAll
+	("testDataSupplier") TestData td) {
+		var workflowBacklogTrajectoryReversed = BacklogTrajectoryEstimator.calculate(td.startingDate, td.startingBacklog, td
+		.inflectionPoints, td.forecast, td.plan, td.behaviour);
 		var workflowFinalBacklog1 = workflowBacklogTrajectoryReversed.head();
 		var workflowBacklogTrajectoryInit = workflowBacklogTrajectoryReversed.tail().reverse();
 		Assume.that(
-						td.behaviour.getWorkflow() != Workflow.outboundDirect // because the `outboundDirect` workflow uses the `ThroughputStrategies::pessimistic` strategy which is non-lineal.
+						td.behaviour.getWorkflow() != Workflow.outboundDirect // because the `outboundDirect` workflow uses the
+						`ThroughputStrategies::pessimistic` strategy which is non-lineal.
 						&& workflowBacklogTrajectoryInit.find(backlog -> Arrays.stream(backlog).anyMatch(p -> p == 0d)).isNone()
 		);
 		var lastInflectionPoint = td.inflectionPoints.last();
@@ -57,16 +60,19 @@ class BacklogProjectionCalculatorTest {
 		Arbitraries.lazy(() -> inflectionPointsInitSubsetsArbitrary).forEachValue(subset -> {
 			var ip = new TreeSet<>(subset);
 			ip.add(lastInflectionPoint);
-			var workflowBacklogIncompleteTrajectoryReversed = BacklogTrajectoryEstimator.calculate(td.startingDate, td.startingBacklog, ip, td.forecast, td.plan, td.behaviour);
+			var workflowBacklogIncompleteTrajectoryReversed = BacklogTrajectoryEstimator.calculate(td.startingDate, td.startingBacklog,
+			ip, td.forecast, td.plan, td.behaviour);
 			var workflowFinalBacklog2 = workflowBacklogIncompleteTrajectoryReversed.head();
 
 			if (HISTOGRAM_MODE) {
 				var pass = IntStream.range(0, td.behaviour.getWorkflow().stages.length)
-						.allMatch(so -> workflowFinalBacklog1[so] - workflowFinalBacklog2[so] <= Math.max(workflowFinalBacklog1[so], workflowFinalBacklog2[so]) / 10000);
+						.allMatch(so -> workflowFinalBacklog1[so] - workflowFinalBacklog2[so] <= Math.max(workflowFinalBacklog1[so],
+						workflowFinalBacklog2[so]) / 10000);
 				Statistics.collect(td.behaviour.getWorkflow(), workflowBacklogTrajectoryInit.isEmpty(), pass ? "success" : "fail");
 			} else {
 				for (var stage = 0; stage < td.behaviour.getWorkflow().stages.length; ++stage) {
-					assertEquals(workflowFinalBacklog1[stage], workflowFinalBacklog2[stage], Math.max(workflowFinalBacklog1[stage], workflowFinalBacklog2[stage]) / 1e3);
+					assertEquals(workflowFinalBacklog1[stage], workflowFinalBacklog2[stage], Math.max(workflowFinalBacklog1[stage],
+					workflowFinalBacklog2[stage]) / 1e3);
 				}
 			}
 		});
@@ -82,7 +88,8 @@ class BacklogProjectionCalculatorTest {
 			List<Instant> partition
 	) {
 		public String toString() {
-			return "TestData(startingDate=" + this.startingDate + ", startingBacklog=" + Arrays.toString(this.startingBacklog) + ", inflectionPoints=" + this.inflectionPoints + ", forecast="
+			return "TestData(startingDate=" + this.startingDate + ", startingBacklog=" + Arrays.toString(this.startingBacklog) + ",
+			inflectionPoints=" + this.inflectionPoints + ", forecast="
 					+ this.forecast + ", plan=" + this.plan + ", behaviour=" + this.behaviour + ", partition=" + this.partition + ")";
 		}
 	}
@@ -93,10 +100,13 @@ class BacklogProjectionCalculatorTest {
 	}
 
 	Arbitrary<TestData> buildTestDataArbitrary(Instant startingDate, Workflow workflow, int minInflectionPoints, int minInitialBacklog) {
-		var endingDateArbitrary = Arbitraries.integers().between(1, 60 * 92).map(minutes -> startingDate.plus(minutes, ChronoUnit.MINUTES));
-		var startingBacklogArbitrary = Arbitraries.integers().between(minInitialBacklog, 199).array(int[].class).ofSize(workflow.stages.length);
+		var endingDateArbitrary = Arbitraries.integers().between(1, 60 * 92).map(minutes -> startingDate.plus(minutes, ChronoUnit
+		.MINUTES));
+		var startingBacklogArbitrary = Arbitraries.integers().between(minInitialBacklog, 199).array(int[].class).ofSize(workflow.stages
+		.length);
 		return Combinators.combine(endingDateArbitrary, startingBacklogArbitrary).flatAs((endingDate, startingBacklog) -> {
-			var inflectionPointsArbitrary = DateTimes.instants().between(startingDate, endingDate).set().ofMinSize(minInflectionPoints).ofMaxSize(5).map(TreeSet::new);
+			var inflectionPointsArbitrary = DateTimes.instants().between(startingDate, endingDate).set().ofMinSize(minInflectionPoints)
+			.ofMaxSize(5).map(TreeSet::new);
 			var forecastArbitrary = buildTrajectoryArbitrary(99, startingDate, endingDate).map(ForecastSupplier.Forecast::new);
 			var planArbitrary = buildPlanArbitrary(workflow, 99, startingDate, endingDate);
 			var partitionArbitrary = buildPartitionArbitrary(startingDate, endingDate);
@@ -113,7 +123,8 @@ class BacklogProjectionCalculatorTest {
 		});
 	}
 
-	private Arbitrary<StaffingPlanSupplier.Plan> buildPlanArbitrary(Workflow workflow, int maxThroughputPerHour, Instant startingDate, Instant endingDate) {
+	private Arbitrary<StaffingPlanSupplier.Plan> buildPlanArbitrary(Workflow workflow, int maxThroughputPerHour, Instant startingDate,
+	Instant endingDate) {
 		return buildTrajectoryArbitrary(maxThroughputPerHour, startingDate, endingDate)
 				.array(Trajectory[].class)
 				.ofSize(workflow.stages.length)

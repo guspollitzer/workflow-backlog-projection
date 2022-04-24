@@ -9,36 +9,36 @@ import java.time.Instant;
 
 public class RequiredStaffEstimator {
 
+  /**
+   * Specifies what the {@link RequiredStaffEstimator} needs to know about the trajectory of the downstream throughput.
+   */
+  public interface DownstreamThroughputTrajectory {
 	/**
-	 * Specifies what the {@link RequiredStaffEstimator} needs to know about the trajectory of the downstream throughput.
+	 * Calculates the definite integral of this scalar trajectory on the specified interval.
 	 */
-	public interface DownstreamThroughputTrajectory {
-		/**
-		 * Calculates the definite integral of this scalar trajectory on the specified interval.
-		 */
-		long integral(Instant from, Instant to);
-	}
+	long integral(Instant from, Instant to);
+  }
 
-	record RequiredStaffEstimation(List<TimeSlot> slots) {}
+  record RequiredStaffEstimation(List<TimeSlot> slots) {}
 
-	record TimeSlot(Instant startingDate, Instant endingDate, List<StageSlot> stagesSlots) {}
+  record TimeSlot(Instant startingDate, Instant endingDate, List<StageSlot> stagesSlots) {}
 
-	record StageSlot(Stage stage, int planned, int minimum, int idle) {}
+  record StageSlot(Stage stage, int planned, int minimum, int idle) {}
 
-	RequiredStaffEstimation estimate(
-			Workflow workflow,
-			DownstreamThroughputTrajectory downstreamThroughputTrajectory
-	) {
+  RequiredStaffEstimation estimate(
+	  Workflow workflow,
+	  DownstreamThroughputTrajectory downstreamThroughputTrajectory
+  ) {
 
-		class LMC {
-			RequiredStaffEstimation calc() {
-				return null;
-			}
-		}
-
-		// TODO
-
+	class LMC {
+	  RequiredStaffEstimation calc() {
 		return null;
+	  }
 	}
+
+	// TODO
+
+	return null;
+  }
 
 }

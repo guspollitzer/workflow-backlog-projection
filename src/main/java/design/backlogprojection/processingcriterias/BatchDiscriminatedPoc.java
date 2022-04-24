@@ -17,10 +17,6 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 public class BatchDiscriminatedPoc implements ProcessingOrderCriteria {
-  @Override
-  public Queue emptyQueue() {
-	return new BatchQueue(0, List.nil());
-  }
 
   @Override
   public SplitQueue decide(
