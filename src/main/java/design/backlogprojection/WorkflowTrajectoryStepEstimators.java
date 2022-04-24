@@ -37,10 +37,10 @@ class WorkflowTrajectoryStepEstimators {
 
 		// calculate the waving achievable power
 		final var wavingInitialQueue = stepStartingBacklog.getQueueAt(wavingStage);
-		final var wavingAchievablePower = Math.max(0, Math.min(wavingInitialQueue.total(), wavingDesiredPower)); // TODO hay que sumar el forecast acá, o no? No lo sumé porque, a diferencia de las otras etapas, en waving la cantidad procesada depende del tamaño de la ola y dicho tamaña se calcula a lo que hay en ready-to-wave al comienzo del intervalo.
-		final var wavingAchievableQueue = transcendentals.processingOrderCriteria()
+		final var wavingAchievablePower = Math.max(0, Math.min(wavingInitialQueue.total(), wavingDesiredPower)); // TODO ¿hay que sumar el forecast acá, o no? No lo sumé porque, a diferencia de las otras etapas, en waving la cantidad procesada depende del tamaño de la ola y dicho tamaña se calcula en el comienzo del intervalo, antes de que entre en juego el pronóstico del resto del intervalo.
+		final var afterWaveQueues = transcendentals.processingOrderCriteria()
 				.decide(wavingStage, wavingInitialQueue, wavingAchievablePower, stepStartingDate, stepEndingDate, nextSlasByDeadline);
-		assert wavingAchievablePower == wavingAchievableQueue.total();
+		assert wavingAchievablePower == afterWaveQueues.processed().total();
 
 		// build the wavingSimulationStep
 		final var upstreamQueue = transcendentals.upstreamThroughputTrajectory().integral(stepStartingDate, stepEndingDate);
@@ -48,14 +48,15 @@ class WorkflowTrajectoryStepEstimators {
 				wavingStage,
 				wavingInitialQueue,
 				upstreamQueue,
-				wavingAchievableQueue,
+				afterWaveQueues.processed(),
+				afterWaveQueues.remaining(),
 				wavingAchievablePower,
 				Math.max(0, wavingDesiredPower - wavingAchievablePower)
 		);
 
 		// estimate the step of each processing stage
 		final var processingStagesTrajectoryStep =
-				estimateProcessingStagesStep(transcendentals.processingStages(), wavingAchievableQueue, wavingAchievablePower, List.nil());
+				estimateProcessingStagesStep(transcendentals.processingStages(), afterWaveQueues.processed(), wavingAchievablePower, List.nil());
 		// return the estimated trajectory step
 		return new WorkflowTrajectoryStep(
 				stepStartingDate,
@@ -90,22 +91,23 @@ class WorkflowTrajectoryStepEstimators {
 			final var stageStepStartingQueue = stepStartingBacklog.getQueueAt(stage);
 			final var maxProcessedTotal = stageStepIncomingTotal + stageStepStartingQueue.total();
 			final var processingPower = Math.round(transcendentals.staffingPlan().integrateThroughputOf(stage, stepStartingDate, stepEndingDate));
-			final var queueShortage = processingPower - maxProcessedTotal;
+			final var queueShortage = Math.max(0, processingPower - maxProcessedTotal);
 			final var processedTotal = Math.min(maxProcessedTotal, processingPower);
-			final var processedQueue = transcendentals.processingOrderCriteria()
+			final var afterProcessQueues = transcendentals.processingOrderCriteria()
 					.decide(stage, stageStepStartingQueue, processedTotal, stepStartingDate, stepEndingDate, nextSlasByDeadline);
-			assert processedTotal == processedQueue.total();
+			assert processedTotal == afterProcessQueues.processed().total();
 			var stageTrajectoryStep = new StageTrajectoryStep(
 					stage,
 					stageStepStartingQueue,
 					stageStepIncomingQueue,
-					processedQueue,
+					afterProcessQueues.processed(),
+					afterProcessQueues.remaining(),
 					processedTotal,
 					queueShortage
 			);
 			return estimateProcessingStagesStep(
 					remainingStages.tail(),
-					processedQueue,
+					afterProcessQueues.processed(),
 					processedTotal,
 					List.cons(stageTrajectoryStep, alreadyEstimatedStages)
 			);

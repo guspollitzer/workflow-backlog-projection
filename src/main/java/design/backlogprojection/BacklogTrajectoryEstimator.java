@@ -3,6 +3,7 @@ package design.backlogprojection;
 import design.global.Workflow.Stage;
 
 import fj.Ord;
+import fj.P2;
 import fj.data.List;
 import fj.data.TreeMap;
 
@@ -35,19 +36,11 @@ public class BacklogTrajectoryEstimator {
 	 */
 	public interface Queue {
 		/** The number of units contained in this queue. */
-		int total();
+		long total();
 
 		/** Should return a {@link Queue} that consists of the units in this queue followed by the units in the received queue, such that:
 		 * {@code queueA.plus(queueB).total() == queueA.total() + queueB.total();}. */
 		Queue append(final Queue other);
-
-		/** Should return a {@link Queue} that consists of the units of this queue with the units contained in the received queue removed;
-		 * such that:
-		 * {@code queueA.minus(queueA).total() == 0; }
-		 *
-		 * Note that the responsibility to ensure that the received {@link Queue} contains the first units of this {@link Queue} is of the
-		 * {@link ProcessingOrderCriteria} implementation. */
-		Queue consume(Queue other);
 	}
 
 	/**
@@ -77,11 +70,10 @@ public class BacklogTrajectoryEstimator {
 		Queue integral(Instant from, Instant to);
 	}
 
-	/**
-	 * Specifies what the {@link BacklogTrajectoryEstimator} needs to know about the processing order criteria of each stage's backlog.
-	 * Note
-	 * that the backlog of every stage should implement the {@link Queue} interface.
-	 */
+  /**
+   * Specifies what the {@link BacklogTrajectoryEstimator} needs to know about the processing order criteria of each stage's backlog.
+   * <p>Note that the backlog of every stage should implement the {@link Queue} interface.
+   */
 	public interface ProcessingOrderCriteria {
 
 		/**
@@ -90,23 +82,23 @@ public class BacklogTrajectoryEstimator {
 		Queue emptyQueue();
 
 		/**
-		 * The implementation should return a {@link Queue} {@code result} such that:
-		 * <p>(1) {@code result.total() = processedQuantity}
-		 * <p>(2) {@code result.get(sla) <= initialQueue.get(sla)} for all slas.
+		 * The implementation should return a {@link Queue} {@code result} such that {@code result.total() = processedQuantity}.
 		 * <p>The number of units that are processed for each SLA is an implementation decision.
 		 * The caller compromise is that the interval {@code (start,end)} should not contain any of the inflection points returned by
 		 * {@link
 		 * #getInflectionPointsBetween(Instant, Instant)}.
 		 */
-		Queue decide(
+		SplitQueue decide(
 				Stage stage, Queue initialQueue,
-				long processedQuantity,
+				long toProcessQuantity,
 				Instant start,
 				Instant end,
 				TreeMap<Instant, List<Sla>> nextSlasByDeadline
 		);
 
 		Stream<Instant> getInflectionPointsBetween(Instant from, Instant to);
+
+		record SplitQueue(Queue remaining, Queue processed) {}
 	}
 
 	public interface BacklogBoundsDecider {
@@ -128,13 +120,10 @@ public class BacklogTrajectoryEstimator {
 			Queue initialQueue,
 			Queue incomingQueue,
 			Queue processedQueue,
+			Queue finalQueue,
 			long processedTotal,
 			long queueShortage
-	) {
-		public Queue finalQueue() {
-			return initialQueue.append(incomingQueue).consume(processedQueue);
-		}
-	}
+	) {}
 
 	/**
 	 * Knows relevant information about a step of an estimated trajectory of a workflow's backlog.

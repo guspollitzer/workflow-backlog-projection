@@ -42,17 +42,18 @@ public class TrajectoryTest {
 						Instant.parse("2030-01-01T00:00:00Z")
 				).list().ofSize(3)
 				.flatMap(instants -> buildTrajectoryArbitrary(
+						9,
 						99,
 						instants.stream().min(Instant::compareTo).get(),
 						instants.stream().max(Instant::compareTo).get()
 				).map(trajectory -> new TestData(trajectory, instants.get(0), instants.get(1), instants.get(2))));
 	}
 
-	public static Arbitrary<Trajectory> buildTrajectoryArbitrary(int maxValue, Instant startingDate, Instant endingDate) {
+	public static Arbitrary<Trajectory> buildTrajectoryArbitrary(int maxSize, int maxValue, Instant startingDate, Instant endingDate) {
 		return Arbitraries.maps(
 				DateTimes.instants().between(startingDate, endingDate),
 				Arbitraries.longs().between(0, maxValue)
-		).ofMaxSize(9).map(TreeMap::new).map(Trajectory::new);
+		).ofMaxSize(maxSize).map(TreeMap::new).map(Trajectory::new);
 	}
 
 }

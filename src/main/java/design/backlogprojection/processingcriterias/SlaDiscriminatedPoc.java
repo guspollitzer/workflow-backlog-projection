@@ -16,16 +16,15 @@ import java.util.stream.Stream;
 
 public class SlaDiscriminatedPoc implements ProcessingOrderCriteria {
 
-
 	@Override
-	public QueueImpl emptyQueue() {
-		return new QueueImpl(Map.of());
+	public SlaQueue emptyQueue() {
+		return new SlaQueue(Map.of());
 	}
 
 	@Override
-	public QueueImpl decide(
+	public SplitQueue decide(
 			Stage stage, Queue initialQueue,
-			long processedQuantity,
+			long toProcessQuantity,
 			Instant start,
 			Instant end,
 			TreeMap<Instant, List<Sla>> nextSlasByDeadline
@@ -40,36 +39,22 @@ public class SlaDiscriminatedPoc implements ProcessingOrderCriteria {
 	}
 
 	/** A {@link Queue} where the units are discriminated by SLA. */
-	private record QueueImpl(Map<Sla, Integer> quantityBySla) implements Queue {
+	public record SlaQueue(Map<Sla, Long> quantityBySla) implements Queue {
 
 		@Override
-		public int total() {
-			return quantityBySla.values().stream().mapToInt(Integer::intValue).sum();
+		public long total() {
+			return quantityBySla.values().stream().mapToLong(Long::longValue).sum();
 		}
 
 		@Override
-		public QueueImpl append(final Queue otherQueue) {
-			var other = (QueueImpl) otherQueue;
+		public SlaQueue append(final Queue otherQueue) {
+			var other = (SlaQueue) otherQueue;
 			var mergedPiles = Stream.concat(
 							quantityBySla.entrySet().stream(),
 							other.quantityBySla.entrySet().stream()
 					)
-					.collect(Collectors.toMap(Entry::getKey, Entry::getValue, Integer::sum));
-			return new QueueImpl(mergedPiles);
-		}
-
-		@Override
-		public Queue consume(Queue other) {
-			return this.append(((QueueImpl)other).negated());
-		}
-
-		QueueImpl negated() {
-			return new QueueImpl(
-					this.quantityBySla.entrySet().stream().collect(Collectors.toMap(
-							Map.Entry::getKey,
-							e -> -e.getValue()
-					))
-			);
+					.collect(Collectors.toMap(Entry::getKey, Entry::getValue, Long::sum));
+			return new SlaQueue(mergedPiles);
 		}
 	}
 }
