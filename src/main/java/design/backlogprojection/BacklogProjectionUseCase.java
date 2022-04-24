@@ -1,8 +1,6 @@
 package design.backlogprojection;
 
 import design.global.Workflow;
-import design.global.Workflow.OutboundDirectStage;
-import design.global.Workflow.OutboundWallStage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -65,8 +63,8 @@ public class BacklogProjectionUseCase {
   @RequiredArgsConstructor
   private enum StrategyByWorkflow {
 	inbound(WorkflowTrajectoryStepEstimators::estimateWavelessStep),
-	outboundDirect(estimators -> estimators.estimateWavefullStep(OutboundDirectStage.wavingDirect)),
-	outboundWall(estimators -> estimators.estimateWavefullStep(OutboundWallStage.wavingForWall));
+	outboundDirect(estimators -> estimators.estimateWavefullStep(Stage.wavingDirect)),
+	outboundWall(estimators -> estimators.estimateWavefullStep(Stage.wavingForWall));
 
 	private final Function<WorkflowTrajectoryStepEstimators, WorkflowTrajectoryStep> stepEstimator;
 

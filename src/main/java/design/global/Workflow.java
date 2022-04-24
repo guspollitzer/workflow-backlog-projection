@@ -1,69 +1,58 @@
 package design.global;
 
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import fj.data.List;
 
-public enum Workflow {
-  inbound(false, InboundStage.values()),
-  outboundDirect(true, OutboundDirectStage.values()),
-  outboundWall(true, OutboundWallStage.values());
+import java.util.Arrays;
 
-  public final boolean hasWaving;
+import static design.global.Workflow.QueueType.FEFO;
+import static design.global.Workflow.QueueType.FIFO;
+
+public enum Workflow {
+  inbound,
+  outboundDirect,
+  outboundWall;
+
   public final Stage[] stages;
   public List<Stage> processingStages;
 
-  Workflow(final boolean hasWaving, final Stage[] stages) {
-	this.hasWaving = hasWaving;
-	this.stages = stages;
-	var list = List.arrayList(this.stages);
-	this.processingStages = this.hasWaving ? list.tail() : list;
+  Workflow() {
+	this.stages = Arrays.stream(Stage.values()).filter(stage -> stage.workflow == this).toArray(Stage[]::new);
+	this.processingStages = List.arrayList(this.stages).filter(stage -> stage.isHumanPowered);
   }
 
-  public interface Stage {
-	String name();
-
-	boolean isHumanPowered();
-
-	int ordinal();
-
-	Workflow workflow();
+  public enum QueueType {
+	FIFO, FEFO
   }
 
-  @Getter
   @RequiredArgsConstructor
-  public enum InboundStage implements Stage {
-	checkIn(true), putAway(true);
-	final boolean humanPowered;
+  public enum Stage {
+	checkIn(inbound, true, FIFO),
+	putAway(inbound, true, FIFO),
+	wavingDirect(outboundDirect,false, FEFO),
+	pickingDirect(outboundDirect,true, FIFO),
+	packingDirect(outboundDirect,true, FIFO),
+	wavingForWall(outboundWall, false, FEFO),
+	pickingForWall(outboundWall, true, FIFO),
+	walling(outboundWall, true, FIFO),
+	packingWalled(outboundWall, true, FIFO);
+
+	private final Workflow workflow;
+	private final boolean isHumanPowered;
+	private final QueueType inQueueType;
 
 	public Workflow workflow() {
-	  return inbound;
+	  return this.workflow;
+	}
+	public boolean isHumanPowered() {
+	  return this.isHumanPowered;
+	}
+	public QueueType inQueueType() {
+	  return this.inQueueType;
+	}
+	public QueueType outQueueType() {
+	  return FIFO;
 	}
   }
-
-  @Getter
-  @RequiredArgsConstructor
-  public enum OutboundDirectStage implements Stage {
-	wavingDirect(false), pickingDirect(true), packingDirect(true);
-	final boolean humanPowered;
-
-	@Override
-	public Workflow workflow() {
-	  return outboundDirect;
-	}
-  }
-
-  @Getter
-  @RequiredArgsConstructor
-  public enum OutboundWallStage implements Stage {
-	wavingForWall(false), pickingForWall(true), walling(true), packingWalled(true);
-	final boolean humanPowered;
-
-	@Override
-	public Workflow workflow() {
-	  return outboundWall;
-	}
-  }
-
 }

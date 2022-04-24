@@ -4,6 +4,7 @@ import design.backlogprojection.BacklogTrajectoryEstimator.ProcessingOrderCriter
 import design.backlogprojection.BacklogTrajectoryEstimator.Queue;
 import design.backlogprojection.BacklogTrajectoryEstimator.Sla;
 import design.backlogprojection.processingcriterias.SlaDiscriminatedPoc.SlaQueue;
+import design.global.Workflow.QueueType;
 import design.global.Workflow.Stage;
 
 import fj.P;
@@ -22,9 +23,9 @@ public class BatchDiscriminatedPoc implements ProcessingOrderCriteria {
   public SplitQueue decide(
 	  Stage stage, Queue queue, long toProcessQuantity, Instant start, Instant end, TreeMap<Instant, List<Sla>> nextSlasByDeadline
   ) {
-	if (stage.isHumanPowered() && queue instanceof BatchQueue initialQueue) {
+	if (stage.inQueueType() == QueueType.FIFO && queue instanceof BatchQueue initialQueue) {
 	  return consumeProportionally(initialQueue.total, initialQueue.heaps, toProcessQuantity, 0, List.nil());
-	} else if (!stage.isHumanPowered() && queue instanceof SlaQueue initialQueue) {
+	} else if (stage.inQueueType() == QueueType.FEFO && queue instanceof SlaQueue initialQueue) {
 	  return consumeNearDeadlineSlasFirst(initialQueue.quantityBySla(), toProcessQuantity, nextSlasByDeadline);
 	} else {
 	  throw new IllegalArgumentException(String.format("Invalid queue type: %s", queue.getClass()));
