@@ -1,5 +1,6 @@
 package design.backlogprojection;
 
+import design.global.ImmutableEnumMap;
 import design.global.Workflow.Stage;
 
 import fj.Ord;
@@ -80,7 +81,7 @@ public class BacklogTrajectoryEstimator {
   public interface ProcessingOrderCriteria {
 
 	/**
-	 * The implementation should return a {@link Queue} {@code result} such that {@code result.total() = processedQuantity}.
+	 * The implementation should return a {@link Queue} {@code result} such that {@code result.total() = toProcessQuantity}.
 	 * <p>Which units of the queue are processed first is an implementation decision.
 	 * <p>The caller compromise is that the interval {@code (start,end)} should not contain any of the inflection points returned by
 	 * {@link #getInflectionPointsBetween(Instant, Instant)}.
@@ -96,7 +97,7 @@ public class BacklogTrajectoryEstimator {
 
 	Stream<Instant> getInflectionPointsBetween(Instant from, Instant to);
 
-	record SplitQueue(Queue remaining, Queue processed) {}
+	record SplitQueue(Queue remaining, ImmutableEnumMap<Stage, Queue> processed) {}
   }
 
   public interface BacklogBoundsDecider {
@@ -111,13 +112,19 @@ public class BacklogTrajectoryEstimator {
    * Knows relevant information about a step of an estimated trajectory of a stage's backlog.
    * @param stage the {@link Stage} this step corresponds to.
    * @param initialQueue the actual backlog at the {@link Stage} when the step started.
-   * @param processedQueue the amount of units processed during this step.
+   * @param incomingQueue the amount of units processed by the previous stage during this step
+   * @param processedQueueByDestinationStage the amount of units processed during this step by the {@link Stage}, broken down by
+   * 	destination {@link Stage}.
+   * @param finalQueue the backlog at the {@link Stage} when the step ended.
+   * @param processedTotal the total amount of units processed during this step by the {@link Stage}
+   * @param queueShortage the total amount of units that are not processed during this step by the {@link Stage} thanks to initial/incoming
+   * 	queue shortage.
    */
   public record StageTrajectoryStep(
 	  Stage stage,
 	  Queue initialQueue,
 	  Queue incomingQueue,
-	  Queue processedQueue,
+	  ImmutableEnumMap<Stage, Queue> processedQueueByDestinationStage,
 	  Queue finalQueue,
 	  long processedTotal,
 	  long queueShortage
@@ -129,7 +136,7 @@ public class BacklogTrajectoryEstimator {
   public record WorkflowTrajectoryStep(
 	  Instant startingDate,
 	  Instant endingDate,
-	  List<StageTrajectoryStep> stagesStep,
+	  ImmutableEnumMap<Stage, StageTrajectoryStep> stagesStep,
 	  TreeMap<Instant, List<Sla>> nextSlasByDeadline
   ) {}
 
@@ -137,6 +144,7 @@ public class BacklogTrajectoryEstimator {
    * Parameters, whose invariability transcend the estimation steps, of a workflow-backlog's trajectory-simulator.
    */
   record StepTranscendentalInvariants(
+	  Stage[] allStages,
 	  List<Stage> processingStages,
 	  UpstreamThroughputTrajectory upstreamThroughputTrajectory,
 	  StaffingPlan staffingPlan,
@@ -158,7 +166,7 @@ public class BacklogTrajectoryEstimator {
 	final var nextSlasByDeadline = groupSlasByDeadline(nextSlas).splitLookup(startingDate)._3();
 
 	// The java language does not support local functions so a local class with a single method is used instead.
-	class WorkflowTrajectoryEstimator {
+	class FollowingStepsEstimator {
 	  /**
 	   * Calculates the following steps of the received workflow trajectory based on its last step and the inputs: staffing plan and
 	   * upstreamForecast.
@@ -167,7 +175,7 @@ public class BacklogTrajectoryEstimator {
 	   * is assumed that inputs don't change during the time intervals between inflection points. Inflection
 	   * points that correspond to deadlines are associated to the SLAs corresponding to said deadline.
 	   */
-	  final List<WorkflowTrajectoryStep> estimateFollowingSteps(
+	  final List<WorkflowTrajectoryStep> estimate(
 		  final List<WorkflowTrajectoryStep> alreadyCalculatedSteps,
 		  final Instant stepStartingInstant,
 		  final List<Instant> remainingInflectionPoints
@@ -176,8 +184,7 @@ public class BacklogTrajectoryEstimator {
 		  return alreadyCalculatedSteps;
 		} else {
 		  final WorkflowBacklog stepStartingBacklog = stage -> alreadyCalculatedSteps.head()
-			  .stagesStep.find(step -> step.stage == stage)
-			  .some().finalQueue;
+			  .stagesStep.get(stage).finalQueue;
 
 		  final var nextWorkflowStep = stepEstimator.apply(new WorkflowTrajectoryStepEstimators(
 			  stepStartingInstant,
@@ -186,7 +193,7 @@ public class BacklogTrajectoryEstimator {
 			  nextSlasByDeadline.splitLookup(stepStartingInstant)._3(),
 			  transcendentals
 		  ));
-		  return estimateFollowingSteps(
+		  return estimate(
 			  List.cons(nextWorkflowStep, alreadyCalculatedSteps),
 			  remainingInflectionPoints.head(),
 			  remainingInflectionPoints.tail()
@@ -216,7 +223,7 @@ public class BacklogTrajectoryEstimator {
 		  nextSlasByDeadline,
 		  transcendentals
 	  ));
-	  return new WorkflowTrajectoryEstimator().estimateFollowingSteps(
+	  return new FollowingStepsEstimator().estimate(
 		  List.cons(firstWorkflowStep, List.nil()),
 		  inflectionPoints.head(),
 		  inflectionPoints.tail()

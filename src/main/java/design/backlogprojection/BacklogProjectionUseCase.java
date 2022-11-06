@@ -37,6 +37,7 @@ public class BacklogProjectionUseCase {
 
 	final StrategyByWorkflow strategy = StrategyByWorkflow.from(workflow);
 	var stepTranscendentalsInvariants = new StepTranscendentalInvariants(
+		workflow.stages,
 		workflow.processingStages,
 		upstreamThroughputTrajectorySupplier.get(),
 		staffingPlanGetter.get(
@@ -63,8 +64,7 @@ public class BacklogProjectionUseCase {
   @RequiredArgsConstructor
   private enum StrategyByWorkflow {
 	inbound(WorkflowTrajectoryStepEstimators::estimateWavelessStep),
-	outboundDirect(estimators -> estimators.estimateWavefullStep(Stage.wavingDirect)),
-	outboundWall(estimators -> estimators.estimateWavefullStep(Stage.wavingForWall));
+	outbound(estimators -> estimators.estimateWavefullStep(Stage.waving));
 
 	private final Function<WorkflowTrajectoryStepEstimators, WorkflowTrajectoryStep> stepEstimator;
 

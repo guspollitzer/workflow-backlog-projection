@@ -53,5 +53,18 @@ public class SlaDiscriminatedPoc implements ProcessingOrderCriteria {
 		  .collect(Collectors.toMap(Entry::getKey, Entry::getValue, Long::sum));
 	  return new SlaQueue(mergedPiles);
 	}
+
+	public SlaQueue consume(SlaQueue other) {
+	  return this.append(other.negated());
+	}
+
+	public SlaQueue negated() {
+	  return new SlaQueue(
+		  this.quantityBySla.entrySet().stream().collect(Collectors.toMap(
+			  Map.Entry::getKey,
+			  e -> -e.getValue()
+		  ))
+	  );
+	}
   }
 }

@@ -1,5 +1,6 @@
 package design.backlogprojection;
 
+import design.global.ImmutableEnumMap;
 import design.global.Workflow.Stage;
 import lombok.RequiredArgsConstructor;
 
@@ -27,6 +28,7 @@ class WorkflowTrajectoryStepEstimators {
   private final StepTranscendentalInvariants transcendentals;
 
   WorkflowTrajectoryStep estimateWavefullStep(final Stage wavingStage) {
+	assert !wavingStage.isHumanPowered();
 	// calculate the waving desired power (integral on [startingInstant, endingInstant] of the waving throughput)
 	final var firstProcessingStage = transcendentals.processingStages().head();
 	final var firstProcessingStageInitialQueue = stepStartingBacklog.getQueueAt(firstProcessingStage);
@@ -47,7 +49,9 @@ class WorkflowTrajectoryStepEstimators {
 	// resto del intervalo.
 	final var afterWaveQueues = transcendentals.processingOrderCriteria()
 		.decide(wavingStage, wavingInitialQueue, wavingAchievablePower, stepStartingDate, stepEndingDate, nextSlasByDeadline);
-	assert wavingAchievablePower == afterWaveQueues.processed().total();
+	assert wavingAchievablePower == afterWaveQueues.processed().toStream(transcendentals.allStages())
+		.mapToLong(x -> x.value().total())
+		.sum();
 
 	// build the wavingSimulationStep
 	final var upstreamQueue = transcendentals.upstreamThroughputTrajectory().integral(stepStartingDate, stepEndingDate);
@@ -61,14 +65,16 @@ class WorkflowTrajectoryStepEstimators {
 		Math.max(0, wavingDesiredPower - wavingAchievablePower)
 	);
 
-	// estimate the step of each processing stage
-	final var processingStagesTrajectoryStep =
-		estimateProcessingStagesStep(transcendentals.processingStages(), afterWaveQueues.processed(), wavingAchievablePower, List.nil());
+	// estimate the simultaneous step for each processing stage
+	var stagesTrajectoryStep = estimateParallelStagesChains(
+		afterWaveQueues.processed(),
+		ImmutableEnumMap.of(wavingStage, wavingTrajectoryStep)
+	);
 	// return the estimated trajectory step
 	return new WorkflowTrajectoryStep(
 		stepStartingDate,
 		stepEndingDate,
-		List.cons(wavingTrajectoryStep, processingStagesTrajectoryStep.reverse()),
+		stagesTrajectoryStep,
 		nextSlasByDeadline
 	);
   }
@@ -77,33 +83,33 @@ class WorkflowTrajectoryStepEstimators {
 	var incomingQueue = transcendentals.upstreamThroughputTrajectory().integral(stepStartingDate, stepEndingDate);
 	// calculate simulation of processing steps
 	final var stagesTrajectoryStep =
-		estimateProcessingStagesStep(transcendentals.processingStages(), incomingQueue, incomingQueue.total(), List.nil());
+		estimateAStepForAStageAndThoseThatFollowIt(transcendentals.processingStages().head(), incomingQueue, ImmutableEnumMap.of());
 	return new WorkflowTrajectoryStep(stepStartingDate, stepEndingDate, stagesTrajectoryStep, nextSlasByDeadline);
   }
 
 
   /**
-   * Calculates the processing stages section of a simulation step.
+   * Estimates a step for the specified stage and all the stages it feeds transitively.
    */
-  private List<StageTrajectoryStep> estimateProcessingStagesStep(
-	  final List<Stage> remainingStages,
+  private ImmutableEnumMap<Stage, StageTrajectoryStep> estimateAStepForAStageAndThoseThatFollowIt(
+	  final Stage stage,
 	  final Queue stageStepIncomingQueue,
-	  final long stageStepIncomingTotal,
-	  final List<StageTrajectoryStep> alreadyEstimatedStages
+	  final ImmutableEnumMap<Stage, StageTrajectoryStep> alreadyEstimatedStages
   ) {
-	if (remainingStages.isEmpty()) {
+	if (stage == null) {
 	  return alreadyEstimatedStages;
 	} else {
-	  final var stage = remainingStages.head();
 	  final var stageStepStartingQueue = stepStartingBacklog.getQueueAt(stage);
-	  final var maxProcessedTotal = stageStepIncomingTotal + stageStepStartingQueue.total();
+	  final var maxProcessedTotal = stageStepIncomingQueue.total() + stageStepStartingQueue.total();
 	  final var processingPower = Math.round(transcendentals.staffingPlan().integrateThroughputOf(stage, stepStartingDate,
-		  stepEndingDate));
+		  stepEndingDate
+	  ));
 	  final var queueShortage = Math.max(0, processingPower - maxProcessedTotal);
 	  final var processedTotal = Math.min(maxProcessedTotal, processingPower);
 	  final var afterProcessQueues = transcendentals.processingOrderCriteria()
 		  .decide(stage, stageStepStartingQueue, processedTotal, stepStartingDate, stepEndingDate, nextSlasByDeadline);
-	  assert processedTotal == afterProcessQueues.processed().total();
+	  assert processedTotal == afterProcessQueues.processed().toStream(transcendentals.allStages()).mapToLong(x -> x.value().total()).sum();
+
 	  var stageTrajectoryStep = new StageTrajectoryStep(
 		  stage,
 		  stageStepStartingQueue,
@@ -113,12 +119,26 @@ class WorkflowTrajectoryStepEstimators {
 		  processedTotal,
 		  queueShortage
 	  );
-	  return estimateProcessingStagesStep(
-		  remainingStages.tail(),
-		  afterProcessQueues.processed(),
-		  processedTotal,
-		  List.cons(stageTrajectoryStep, alreadyEstimatedStages)
-	  );
+
+	  return estimateParallelStagesChains(afterProcessQueues.processed(), alreadyEstimatedStages.put(stage, stageTrajectoryStep));
 	}
+  }
+
+  private ImmutableEnumMap<Stage, StageTrajectoryStep> estimateParallelStagesChains(
+	  final ImmutableEnumMap<Stage, BacklogTrajectoryEstimator.Queue> incomingQueuesByStage,
+	  final ImmutableEnumMap<Stage, StageTrajectoryStep> alreadyEstimatedStages
+  ) {
+	return incomingQueuesByStage.toStream(transcendentals.allStages())
+		.reduce(
+			alreadyEstimatedStages,
+			(previouslyEstimatedStages, processedQueueAndItsDestinationStage) -> previouslyEstimatedStages.putAll(
+				estimateAStepForAStageAndThoseThatFollowIt(
+					processedQueueAndItsDestinationStage.key(),
+					processedQueueAndItsDestinationStage.value(),
+					ImmutableEnumMap.of()
+				)
+			),
+			ImmutableEnumMap::putAll
+		);
   }
 }
